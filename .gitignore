@@ -9,3 +9,6 @@ desktop.ini
 
 # Documentos de referencia (no se publican)
 *.pdf
+
+# Informes de trabajo locales
+INFORME_*.md
