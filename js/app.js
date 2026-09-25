@@ -553,10 +553,12 @@ function doCalc() {
   // Densidad del aire según la altitud (a 20 °C): 1,20 kg/m³ al nivel del mar, 1,11 kg/m³ en Madrid
   const P = pAtm(h);
   const RHO = P / (287.05 * 293.15), RHO_CP = RHO * CP_AIRE;
-  // Aire exterior: sin recuperación, el aire de ventilación entra por las mismas aberturas que las
-  // infiltraciones (se toma el mayor); con doble flujo, infiltraciones + ventilación no recuperada.
-  const qAirS = v.rec ? qi + qv * (1 - v.eta) : Math.max(qi, qv);
-  const qAirL = v.rec ? qi + qv : Math.max(qi, qv);
+  // Aire exterior: la ventilación y las infiltraciones entran por las mismas aberturas, así que se
+  // toma el mayor de los dos caudales. El recuperador de doble flujo es sensible: reduce la carga
+  // sensible sobre el caudal de ventilación, pero no recupera humedad, así que la carga latente
+  // se calcula sobre el caudal sin recuperar.
+  const qAirL = Math.max(qi, qv);
+  const qAirS = v.rec ? Math.max(qi, qv * (1 - v.eta)) : qAirL;
 
   // ─── CALEFACCIÓN (UNE-EN 12831 simplificada, régimen estacionario)
   const Qwc = Uw * g.wallA * dTc;
@@ -650,7 +652,7 @@ function render(r) {
   $('rRefWm2').textContent = `${fmt(r.Qref / g.supT)} W/m² · sensible ${kw(r.Qsens)} kW · latente ${kw(r.Qlat)} kW`;
 
   const floorLbl = r.suelo ? r.suelo.label : 'Suelo';
-  const airLbl = v.rec ? `Aire exterior (infiltraciones + ventilación, recuperador ${fmt(v.eta * 100, 0)} %)` : 'Aire exterior (ventilación o infiltraciones)';
+  const airLbl = v.rec ? `Aire exterior (ventilación con recuperador sensible ${fmt(v.eta * 100, 0)} %)` : 'Aire exterior (ventilación o infiltraciones)';
   $('heatBk').innerHTML = mkBk([
     { n: 'Muros exteriores', v: r.Qwc },
     { n: 'Cubierta', v: r.Qcc },
@@ -699,7 +701,7 @@ function render(r) {
     ${g.floorA ? row(r.suelo.label, `${fmt(g.floorA, 0)} m²`, floorHc, r.suelo.b === null ? '—' : `b = ${fmt(r.suelo.b, 1)}`) : ''}
     ${row('Ventilación', `${fmt(v.qv)} l/s`, v.desc, '')}
     ${row('Infiltraciones', `${$('estanq').value.replace('.', ',')} ren/h → ${fmt(v.qi)} l/s`)}
-    ${row('Aire exterior de cálculo', v.rec ? `Doble flujo, recuperador ${fmt(v.eta * 100, 0)} %` : 'Mayor de ventilación e infiltraciones', `${fmt(r.qAirS * 1000)} l/s`, `${fmt(r.qAirS * 1000)} l/s sens. · ${fmt(r.qAirL * 1000)} l/s lat.`)}
+    ${row('Aire exterior de cálculo', v.rec ? `Mayor de ventilación e infiltraciones · recuperador sensible ${fmt(v.eta * 100, 0)} %` : 'Mayor de ventilación e infiltraciones', `${fmt(r.qAirS * 1000)} l/s${v.rec ? ' equivalentes' : ''}`, `${fmt(r.qAirS * 1000)} l/s sens. · ${fmt(r.qAirL * 1000)} l/s lat.`)}
     ${row('Humedad específica', '—', '', `ext. ${fmt(r.We * 1000)} g/kg · int. ${fmt(r.Wi * 1000)} g/kg`)}
     ${row('Ocupación y equipos', `${r.nper} personas · ${r.gW} W/m²`, '', `${kw(r.Qps + r.Qpl + r.Qeq)} kW`)}
     <tr class="total"><td colspan="2">Carga total de diseño</td><td class="r heat-c">${kw(r.Qcal)} kW</td><td class="r cool-c">${kw(r.Qref)} kW</td></tr>
