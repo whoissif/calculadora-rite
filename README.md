@@ -4,8 +4,9 @@ Herramienta web interactiva para el cálculo de cargas térmicas de calefacción
 
 ## Demo en vivo
 
-Despliega en GitHub Pages y añade aquí la URL:  
-`https://<tu-usuario>.github.io/calculadora-rite/`
+**https://whoissif.github.io/calculadora-rite/**
+
+El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compilación, sin dependencias y sin paso de despliegue. Código fuente en [github.com/whoissif/calculadora-rite](https://github.com/whoissif/calculadora-rite).
 
 ## Características
 
@@ -62,6 +63,7 @@ calculadora-rite/
 ├── js/
 │   ├── data.js       # Datos normativos: zonas CTE por provincia y altitud, estaciones IDAE, límites U, caudales, radiación
 │   └── app.js        # Lógica: navegación, validación, cálculo de cargas y resultados
+├── .gitignore        # Excluye los documentos de referencia (*.pdf) y la configuración local
 └── README.md
 ```
 
@@ -75,21 +77,25 @@ Basta con abrir `index.html` en el navegador. Si prefieres servirlo:
 python -m http.server 8000
 ```
 
-## Despliegue en GitHub Pages
+## Publicación
 
-1. Crea un repositorio nuevo en GitHub (p. ej. `calculadora-rite`).
-2. Sube el proyecto:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: calculadora RITE v1"
-   git branch -M main
-   git remote add origin https://github.com/<tu-usuario>/calculadora-rite.git
-   git push -u origin main
-   ```
-3. En el repositorio, ve a **Settings → Pages**.
-4. En *Source*, selecciona **Deploy from a branch** → `main` → `/ (root)`.
-5. Guarda. En unos minutos la URL estará activa.
+El proyecto está publicado como sitio estático en GitHub Pages, sirviendo la raíz de la rama `main`:
+
+| | |
+|---|---|
+| Sitio | https://whoissif.github.io/calculadora-rite/ |
+| Repositorio | https://github.com/whoissif/calculadora-rite |
+| Configuración | **Settings → Pages** · *Source*: `Deploy from a branch` · *Branch*: `main` · carpeta `/ (root)` |
+
+Para publicar cambios basta con subirlos a `main`; GitHub Pages vuelve a construir el sitio en uno o dos minutos:
+
+```bash
+git add .
+git commit -m "descripción del cambio"
+git push
+```
+
+El PDF de referencia `TFG_CARGAS.pdf` (25 MB) no se publica: la regla `*.pdf` de `.gitignore` lo mantiene fuera del repositorio, y el sitio no lo necesita.
 
 ## Aviso
 
