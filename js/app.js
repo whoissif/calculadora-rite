@@ -553,12 +553,12 @@ function doCalc() {
   // Densidad del aire según la altitud (a 20 °C): 1,20 kg/m³ al nivel del mar, 1,11 kg/m³ en Madrid
   const P = pAtm(h);
   const RHO = P / (287.05 * 293.15), RHO_CP = RHO * CP_AIRE;
-  // Aire exterior: la ventilación y las infiltraciones entran por las mismas aberturas, así que se
-  // toma el mayor de los dos caudales. El recuperador de doble flujo es sensible: reduce la carga
-  // sensible sobre el caudal de ventilación, pero no recupera humedad, así que la carga latente
-  // se calcula sobre el caudal sin recuperar.
+  // Aire exterior: la ventilación y las infiltraciones entran por las mismas aberturas, así que el
+  // caudal de referencia es el mayor de los dos. El recuperador de doble flujo es sensible: su
+  // eficiencia se aplica a la fracción de ese caudal que pasa por el intercambiador (la ventilación),
+  // ponderada sobre el caudal de referencia. No recupera humedad, así que la carga latente no varía.
   const qAirL = Math.max(qi, qv);
-  const qAirS = v.rec ? Math.max(qi, qv * (1 - v.eta)) : qAirL;
+  const qAirS = v.rec ? Math.max(qAirL - v.eta * qv, 0) : qAirL;
 
   // ─── CALEFACCIÓN (UNE-EN 12831 simplificada, régimen estacionario)
   const Qwc = Uw * g.wallA * dTc;

@@ -22,7 +22,7 @@ El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compil
   - Transmisión por muros, cubierta y ventanas.
   - Suelo sobre el terreno con los factores fg1 y fg2; forjado sobre el aire exterior con U·A·ΔT; sobre local no calefactado con el factor b.
   - Puentes térmicos (10 % de la transmisión).
-  - Aire exterior: el mayor entre ventilación e infiltraciones; con doble flujo se aplica la recuperación sensible al caudal de ventilación (la carga latente no varía, porque el recuperador no recupera humedad).
+  - Aire exterior: el mayor entre ventilación e infiltraciones; con doble flujo se aplica la recuperación sensible a la fracción de caudal que pasa por el intercambiador (la carga latente no varía, porque el recuperador no recupera humedad).
 - **Refrigeración**, calculada hora a hora para el 21 de julio, tomando la hora de carga máxima:
   - Posición del sol según la latitud y radiación de cielo despejado (ASHRAE) sobre cada fachada y la cubierta.
   - Sombras de edificios cercanos mediante el ángulo de obstrucción de cada fachada.
