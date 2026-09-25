@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Calculadora Térmica RITE</title>
+<meta name="description" content="Cálculo de cargas de calefacción y refrigeración de edificios según RITE, CTE DB-HE 2019 y UNE-EN 12831.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2353f'/%3E%3Cstop offset='1' stop-color='%2305d5ff'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3Cpath d='M16 7l-8 7v11h16V14z' fill='none' stroke='white' stroke-width='2.5' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="css/styles.css">
+<script src="js/data.js" defer></script>
+<script src="js/app.js" defer></script>
+</head>
+<body>
+
+<!-- Fondo geométrico animado -->
+<div class="stripe-bg" aria-hidden="true"></div>
+
+<!-- ═══════════════════════════════════════ HERO -->
+<header class="hero">
+  <div class="hero__bar">
+    <div class="hero__brand">
+      <div class="hero__logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 10.5 12 3l9 7.5V21H3z"/><path d="M12 17a2.5 2.5 0 0 0 1-4.8V8"/>
+        </svg>
+      </div>
+      Calculadora Térmica RITE
+    </div>
+    <div class="hero__pill">RITE · CTE DB-HE 2019</div>
+  </div>
+  <h1>Cargas térmicas<br>de edificios</h1>
+  <p>Calcula la potencia de calefacción y refrigeración de un edificio en cuatro pasos y comprueba si su envolvente cumple el CTE.</p>
+</header>
+
+<!-- ═══════════════════════════════════════ MAIN -->
+<main class="container" id="main">
+
+<!-- Stepper -->
+<nav class="stepper" id="stepper" aria-label="Progreso">
+  <div class="step-item" id="si1">
+    <div class="step-dot"><span class="step-num">1</span></div>
+    <div class="step-label">Localización</div>
+    <div class="step-connector"></div>
+  </div>
+  <div class="step-item" id="si2">
+    <div class="step-dot"><span class="step-num">2</span></div>
+    <div class="step-label">Geometría</div>
+    <div class="step-connector"></div>
+  </div>
+  <div class="step-item" id="si3">
+    <div class="step-dot"><span class="step-num">3</span></div>
+    <div class="step-label">Envolvente</div>
+    <div class="step-connector"></div>
+  </div>
+  <div class="step-item" id="si4">
+    <div class="step-dot"><span class="step-num">4</span></div>
+    <div class="step-label">Ventilación</div>
+    <div class="step-connector"></div>
+  </div>
+  <div class="step-item" id="si5">
+    <div class="step-dot"><span class="step-num">5</span></div>
+    <div class="step-label">Resultados</div>
+  </div>
+</nav>
+
+<!-- ─── PASO 1 ─────────────────────────────── -->
+<section id="step-1" class="step">
+  <div class="card">
+    <div class="card__head">
+      <div class="card__eyebrow">Paso 1 de 4</div>
+      <h2 class="card__title">Localización y uso del edificio</h2>
+      <p class="card__sub">La provincia y la altitud fijan la zona climática del CTE. Las temperaturas de proyecto salen de la guía del IDAE a la que remite el RITE.</p>
+    </div>
+    <div class="err-banner" id="eb1">Completa todos los campos obligatorios para continuar.</div>
+    <div class="fg">
+      <div class="field">
+        <label for="provincia">Provincia</label>
+        <select id="provincia" onchange="onProv()">
+          <option value="">— Seleccionar provincia —</option>
+        </select>
+        <span class="err-txt" id="e-prov">Selecciona una provincia</span>
+      </div>
+      <div class="field">
+        <label for="alti">Altitud del emplazamiento <span class="unit">(m)</span></label>
+        <input type="number" id="alti" min="0" max="3500" step="1" oninput="onSite()">
+        <div class="hint" id="altiHint">Por defecto, la de la capital</div>
+        <span class="err-txt" id="e-alti">Introduce la altitud (0–3.500 m)</span>
+      </div>
+      <div class="field col2">
+        <label for="estacion">Estación climática de referencia (IDAE)</label>
+        <select id="estacion" onchange="onSite()"></select>
+      </div>
+
+      <div class="col2 hidden" id="zoneDisp">
+        <div class="zone-chip">
+          <div class="zone-chip__code" id="zCode">—</div>
+          <div class="zone-chip__info">
+            <div class="zone-chip__name" id="zName">—</div>
+            <div id="zTemps" style="margin-top:2px">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="tipoEdi">Uso del edificio</label>
+        <select id="tipoEdi" onchange="onUso()">
+          <option value="residencial">Vivienda / Residencial</option>
+          <option value="oficinas">Oficinas / Administración</option>
+          <option value="comercial">Comercio / Hostelería</option>
+          <option value="sanitario">Sanitario / Residencia de mayores</option>
+          <option value="industrial">Industrial / Nave</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="anio">Año de construcción</label>
+        <select id="anio" onchange="onAnio()">
+          <option value="pre1980">Antes de 1980 (sin aislamiento)</option>
+          <option value="80_00">1980 – 2000</option>
+          <option value="00_13">2000 – 2013</option>
+          <option value="13_19">2013 – 2019</option>
+          <option value="post19" selected>Posterior a 2019 / obra nueva</option>
+        </select>
+        <div class="hint">Preselecciona una envolvente típica en el paso 3</div>
+      </div>
+    </div>
+
+    <details class="adv" id="tempsBox">
+      <summary>Condiciones exteriores de proyecto <span class="unit">(editables)</span></summary>
+      <div class="fg fg-3">
+        <div class="field">
+          <label for="tWin">T seca invierno <span class="unit">(°C)</span></label>
+          <input type="number" id="tWin" step="0.1" oninput="onTempEdit()">
+          <div class="hint" id="tWinHint">Percentil 99 %</div>
+        </div>
+        <div class="field">
+          <label for="tSum">T seca verano <span class="unit">(°C)</span></label>
+          <input type="number" id="tSum" step="0.1" oninput="onTempEdit()">
+          <div class="hint">Percentil 1 %, máxima del día</div>
+        </div>
+        <div class="field">
+          <label for="tWet">T húmeda coincidente <span class="unit">(°C)</span></label>
+          <input type="number" id="tWet" step="0.1" oninput="onTempEdit()">
+          <div class="hint">Verano, percentil 1 %</div>
+        </div>
+        <div class="field">
+          <label for="tDr">Oscilación diaria verano <span class="unit">(°C)</span></label>
+          <input type="number" id="tDr" step="0.1" min="0" max="30" oninput="onTempEdit()">
+          <div class="hint">Máxima − mínima del día (OMDR)</div>
+        </div>
+        <div class="field">
+          <label for="tMed">T media anual <span class="unit">(°C)</span></label>
+          <input type="number" id="tMed" step="0.1" oninput="onTempEdit()">
+          <div class="hint">Pérdidas por el terreno</div>
+        </div>
+        <div class="field">
+          <label for="tLat">Latitud <span class="unit">(°)</span></label>
+          <input type="number" id="tLat" step="0.01" min="27" max="44" oninput="onTempEdit()">
+          <div class="hint">Posición del sol</div>
+        </div>
+        <div class="field col4">
+          <label for="zOver">Zona climática CTE</label>
+          <select id="zOver" onchange="onZone()">
+            <option value="">Automática (según provincia y altitud)</option>
+          </select>
+        </div>
+      </div>
+      <span class="err-txt" id="e-temps">Completa las condiciones exteriores (la temperatura húmeda no puede superar a la seca)</span>
+      <p class="adv__note" id="tempsNote"></p>
+    </details>
+
+    <div class="actions">
+      <div></div>
+      <button class="btn btn-primary" onclick="nav(2)">Geometría <span class="arrow">→</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PASO 2 ─────────────────────────────── -->
+<section id="step-2" class="step hidden">
+  <div class="card">
+    <div class="card__head">
+      <div class="card__eyebrow">Paso 2 de 4</div>
+      <h2 class="card__title">Geometría del edificio</h2>
+      <p class="card__sub">Dimensiones del edificio o del local que se va a climatizar.</p>
+    </div>
+    <div class="err-banner" id="eb2">Completa todos los campos obligatorios para continuar.</div>
+    <div class="fg">
+      <div class="field">
+        <label for="posicion">Posición dentro del edificio</label>
+        <select id="posicion" onchange="onPos()">
+          <option value="completo">Edificio completo o unifamiliar (cubierta y suelo)</option>
+          <option value="ultima">Última planta (con cubierta, sin suelo)</option>
+          <option value="baja">Planta más baja (con suelo, sin cubierta)</option>
+          <option value="intermedia">Planta intermedia (sin cubierta ni suelo)</option>
+        </select>
+      </div>
+      <div class="field" id="wrap-suelo">
+        <label for="sueloTipo">El suelo inferior está en contacto con</label>
+        <select id="sueloTipo" onchange="onSuelo()">
+          <option value="terreno">El terreno (solera)</option>
+          <option value="aire">El aire exterior (porche, garaje abierto, voladizo)</option>
+          <option value="nocal">Un local no calefactado cerrado (garaje, sótano)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="sup">Superficie útil por planta <span class="unit">(m²)</span></label>
+        <input type="number" id="sup" min="10" max="99999" placeholder="120" oninput="updDerived()">
+        <span class="err-txt" id="e-sup">Introduce la superficie (mín. 10 m²)</span>
+      </div>
+      <div class="field">
+        <label for="npl">Número de plantas</label>
+        <select id="npl" onchange="updDerived()">
+          <option value="1">1 planta</option>
+          <option value="2">2 plantas</option>
+          <option value="3">3 plantas</option>
+          <option value="4">4 plantas</option>
+          <option value="5">5 plantas</option>
+          <option value="6">6 plantas</option>
+          <option value="8">8 plantas</option>
+          <option value="10">10 plantas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="alt">Altura libre por planta <span class="unit">(m)</span></label>
+        <input type="number" id="alt" min="2" max="20" step="0.1" value="2.7" oninput="updDerived()">
+        <span class="err-txt" id="e-alt">Altura entre 2 y 20 m</span>
+      </div>
+      <div class="field">
+        <label for="giro">Giro de las fachadas respecto al norte <span class="unit">(°)</span></label>
+        <input type="number" id="giro" min="-45" max="45" step="1" value="0" oninput="updFacades()">
+        <div class="hint">0° = fachadas mirando exactamente a N, E, S y O. Positivo, en sentido horario.</div>
+        <span class="err-txt" id="e-giro">Entre −45° y 45°</span>
+      </div>
+    </div>
+
+    <div class="section-head" style="margin-top:28px">Fachadas exteriores por orientación</div>
+    <div class="table-wrap">
+      <table class="ftable">
+        <thead>
+          <tr>
+            <th>Fachada</th>
+            <th>Longitud de muro exterior <span class="unit">(m por planta)</span></th>
+            <th>Acristalamiento <span class="unit">(% de la fachada)</span></th>
+            <th>Obstrucción enfrente <span class="unit">(°)</span></th>
+          </tr>
+        </thead>
+        <tbody id="facadeRows"></tbody>
+      </table>
+    </div>
+    <span class="err-txt" id="e-per">Introduce al menos 4 m de muro exterior; acristalamiento entre 0 y 90 %, obstrucción entre 0 y 80°</span>
+    <p class="adv__note">La obstrucción es el ángulo sobre el horizonte de los edificios o elementos situados enfrente de la fachada, visto desde el centro de las ventanas. Por ejemplo, un edificio de 11 m más alto que la ventana situado a 11 m de distancia da 45°. Deja 0 si no hay obstrucciones.</p>
+
+    <div class="notice notice-blue" id="derivedBox">
+      <span class="notice__icon">Σ</span>
+      <span id="derivedTxt">Introduce los datos para ver el resumen geométrico.</span>
+    </div>
+    <div class="notice notice-yellow">
+      <span class="notice__icon">!</span>
+      <span><strong>Longitud de muro exterior × altura = superficie de fachada exterior.</strong> Mide solo los muros en contacto con el exterior o con espacios no calefactados (sótanos, garajes, etc.). No incluyas medianeras ni paredes con otras viviendas calefactadas.</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="nav(1)"><span class="arrow arrow-back">←</span> Localización</button>
+      <button class="btn btn-primary" onclick="nav(3)">Envolvente <span class="arrow">→</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PASO 3 ─────────────────────────────── -->
+<section id="step-3" class="step hidden">
+  <div class="card">
+    <div class="card__head">
+      <div class="card__eyebrow">Paso 3 de 4</div>
+      <h2 class="card__title">Envolvente térmica</h2>
+      <p class="card__sub">Selecciona el tipo de cerramiento de cada elemento. La etiqueta indica si cumple la transmitancia límite del CTE DB-HE 2019 en tu zona.</p>
+    </div>
+    <div class="err-banner" id="eb3">Selecciona una opción en cada tipo de cerramiento.</div>
+    <div class="notice notice-blue" style="margin:0 0 24px">
+      <span class="notice__icon">i</span>
+      <span>Viene preseleccionada una envolvente típica del año de construcción. Cámbiala si conoces la solución real.</span>
+    </div>
+
+    <div class="env-group" role="radiogroup" aria-label="Muros exteriores">
+      <div class="section-head">Muros exteriores</div>
+      <div class="opts opts-2" id="muro-grid"></div>
+      <span class="err-txt" id="e-muro">Selecciona el tipo de muro</span>
+    </div>
+    <div class="env-group" role="radiogroup" aria-label="Cubierta" id="grp-cub">
+      <div class="section-head">Cubierta / Techo</div>
+      <div class="opts opts-3" id="cub-grid"></div>
+      <span class="err-txt" id="e-cub">Selecciona el tipo de cubierta</span>
+    </div>
+    <div class="env-group" role="radiogroup" aria-label="Suelo" id="grp-sue">
+      <div class="section-head" id="sueHead">Suelo sobre el terreno</div>
+      <div class="opts opts-3" id="sue-grid"></div>
+      <span class="err-txt" id="e-sue">Selecciona el tipo de suelo</span>
+    </div>
+    <div class="env-group" role="radiogroup" aria-label="Ventanas" style="margin-bottom:12px">
+      <div class="section-head">Ventanas y carpintería</div>
+      <div class="opts opts-2" id="ven-grid"></div>
+      <span class="err-txt" id="e-ven">Selecciona el tipo de ventana</span>
+    </div>
+
+    <button type="button" class="toggle-row" id="shBtn" role="switch" aria-checked="false" onclick="toggleSh()">
+      <span class="toggle" id="shTog"></span>
+      <span class="toggle-lbl">Las ventanas cuentan con protección solar exterior (toldos, lamas, persianas)</span>
+    </button>
+
+    <div class="fg" style="margin-top:12px">
+      <div class="field">
+        <label for="color">Color exterior de fachada y cubierta</label>
+        <select id="color">
+          <option value="claro">Claro</option>
+          <option value="medio" selected>Medio</option>
+          <option value="oscuro">Oscuro</option>
+        </select>
+        <div class="hint">Afecta a la ganancia solar sobre muros y cubierta en verano</div>
+      </div>
+      <div class="field">
+        <label for="inercia">Inercia térmica del edificio</label>
+        <select id="inercia">
+          <option value="ligera">Ligera — entramado, tabiquería seca</option>
+          <option value="media" selected>Media — fábrica de ladrillo</option>
+          <option value="pesada">Pesada — hormigón, muros gruesos</option>
+        </select>
+        <div class="hint">Parte de la radiación solar se almacena en la masa del edificio</div>
+      </div>
+    </div>
+
+    <div class="cte-panel hidden" id="ctePanel">
+      <div class="cte-panel__head">Verificación CTE DB-HE 2019 · transmitancias límite (tabla 3.1.1.a-HE1)</div>
+      <div id="ctePanelRows"></div>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="nav(2)"><span class="arrow arrow-back">←</span> Geometría</button>
+      <button class="btn btn-primary" onclick="nav(4)">Ventilación <span class="arrow">→</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ─── PASO 4 ─────────────────────────────── -->
+<section id="step-4" class="step hidden">
+  <div class="card">
+    <div class="card__head">
+      <div class="card__eyebrow">Paso 4 de 4</div>
+      <h2 class="card__title">Condiciones interiores, ventilación y ocupación</h2>
+      <p class="card__sub">Temperaturas interiores según RITE IT 1.1.4.1 y caudal de aire exterior según RITE IT 1.1.4.2 o CTE DB-HS3 en viviendas.</p>
+    </div>
+    <div class="err-banner" id="eb4">Completa todos los campos antes de calcular.</div>
+
+    <div class="section-head">Condiciones interiores</div>
+    <div class="fg fg-3" style="margin-bottom:28px">
+      <div class="field">
+        <label for="tiW">T interior invierno <span class="unit">(°C)</span></label>
+        <input type="number" id="tiW" min="18" max="25" step="0.5" value="21">
+        <div class="hint">RITE: 21–23 °C</div>
+        <span class="err-txt" id="e-tiW">Entre 18 y 25 °C</span>
+      </div>
+      <div class="field">
+        <label for="tiS">T interior verano <span class="unit">(°C)</span></label>
+        <input type="number" id="tiS" min="21" max="28" step="0.5" value="25">
+        <div class="hint">RITE: 23–25 °C</div>
+        <span class="err-txt" id="e-tiS">Entre 21 y 28 °C</span>
+      </div>
+      <div class="field">
+        <label for="hrS">Humedad relativa verano <span class="unit">(%)</span></label>
+        <input type="number" id="hrS" min="30" max="70" step="1" value="50">
+        <div class="hint">RITE: 45–60 %</div>
+        <span class="err-txt" id="e-hrS">Entre 30 y 70 %</span>
+      </div>
+    </div>
+
+    <div class="section-head">Ventilación e infiltraciones</div>
+    <div class="fg">
+      <div class="field" id="wrap-nviv">
+        <label for="nviv">Número de viviendas</label>
+        <input type="number" id="nviv" min="1" max="999" value="1" oninput="updVent()">
+        <span class="err-txt" id="e-nviv">Mínimo 1 vivienda</span>
+      </div>
+      <div class="field" id="wrap-ndor">
+        <label for="ndor">Dormitorios por vivienda</label>
+        <select id="ndor" onchange="updVent()">
+          <option value="1">0 – 1 dormitorio</option>
+          <option value="2">2 dormitorios</option>
+          <option value="3" selected>3 dormitorios</option>
+          <option value="4">4 dormitorios</option>
+          <option value="5">5 dormitorios</option>
+        </select>
+      </div>
+      <div class="field col2 hidden" id="wrap-ida">
+        <label for="ida">Calidad del aire interior <span class="unit">(RITE tabla 1.4.2.1, caudal por persona)</span></label>
+        <select id="ida" onchange="updVent()">
+          <option value="IDA1">IDA 1 — Óptima (hospitales, guarderías): 20 l/s·persona</option>
+          <option value="IDA2">IDA 2 — Buena (oficinas, residencias, aulas): 12,5 l/s·persona</option>
+          <option value="IDA3">IDA 3 — Media (comercio, hostelería, gimnasios): 8 l/s·persona</option>
+          <option value="IDA4">IDA 4 — Baja: 5 l/s·persona</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="nper">Número de personas (ocupación máxima)</label>
+        <input type="number" id="nper" min="1" max="9999" placeholder="4" oninput="updVent()">
+        <span class="err-txt" id="e-nper">Introduce el número de personas</span>
+      </div>
+      <div class="field">
+        <label for="estanq">Estanqueidad del edificio (infiltraciones)</label>
+        <select id="estanq">
+          <option value="0.10">Muy estanco — Passivhaus: 0,1 ren/h</option>
+          <option value="0.30">Estanco — carpintería reciente bien sellada: 0,3 ren/h</option>
+          <option value="0.50" selected>Normal — carpintería estándar: 0,5 ren/h</option>
+          <option value="0.80">Con fugas — carpintería antigua: 0,8 ren/h</option>
+          <option value="1.20">Muy permeable — edificio antiguo sin sellado: 1,2 ren/h</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vsis">Sistema de ventilación</label>
+        <select id="vsis" onchange="updVent()">
+          <option value="ext">Natural o extracción mecánica (sin recuperación)</option>
+          <option value="rec">Doble flujo con recuperador de calor</option>
+        </select>
+      </div>
+      <div class="field hidden" id="wrap-eta">
+        <label for="eta">Eficiencia del recuperador <span class="unit">(%)</span></label>
+        <input type="number" id="eta" min="0" max="95" step="1" value="70">
+        <div class="hint">Eficiencia sensible, según la ficha técnica del equipo</div>
+        <span class="err-txt" id="e-eta">Entre 0 y 95 %</span>
+      </div>
+      <div class="field col2">
+        <label for="gains">Ganancias internas — iluminación y equipos</label>
+        <select id="gains">
+          <option value="5">Baja — residencial poco equipado: ~5 W/m²</option>
+          <option value="8" selected>Media — residencial normal: ~8 W/m²</option>
+          <option value="12">Media-alta — pequeñas oficinas: ~12 W/m²</option>
+          <option value="18">Alta — oficinas con equipos: ~18 W/m²</option>
+          <option value="25">Muy alta — comercio / restauración: ~25 W/m²</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="notice notice-blue">
+      <span class="notice__icon">Σ</span>
+      <span id="ventTxt">—</span>
+    </div>
+    <div class="notice notice-yellow hidden" id="recWarn">
+      <span class="notice__icon">!</span>
+      <span>El caudal de aire expulsado supera 0,5 m³/s: el RITE (IT 1.2.4.5.2) obliga a instalar recuperación de calor.</span>
+    </div>
+
+    <div class="actions">
+      <button class="btn btn-ghost" onclick="nav(3)"><span class="arrow arrow-back">←</span> Envolvente</button>
+      <button class="btn btn-calc" onclick="doCalc()">Calcular cargas térmicas <span class="arrow">→</span></button>
+    </div>
+  </div>
+</section>
+
+<!-- ─── RESULTADOS ──────────────────────────── -->
+<section id="step-results" class="step hidden">
+
+  <div class="kpi-grid">
+    <div class="kpi kpi-heat">
+      <div class="kpi__label">Carga de diseño</div>
+      <div class="kpi__type">Calefacción</div>
+      <div><span class="kpi__value" id="rCalKw">—</span> <span class="kpi__unit">kW</span></div>
+      <div class="kpi__rec" id="rCalRec"></div>
+      <div class="kpi__wm2" id="rCalWm2"></div>
+    </div>
+    <div class="kpi kpi-cool">
+      <div class="kpi__label">Carga de diseño</div>
+      <div class="kpi__type">Refrigeración</div>
+      <div><span class="kpi__value" id="rRefKw">—</span> <span class="kpi__unit">kW</span></div>
+      <div class="kpi__rec" id="rRefRec"></div>
+      <div class="kpi__wm2" id="rRefWm2"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="section-head">Desglose de calefacción</h3>
+    <div id="heatBk"></div>
+  </div>
+
+  <div class="card">
+    <h3 class="section-head">Desglose de refrigeración</h3>
+    <div id="coolBk"></div>
+  </div>
+
+  <div class="card">
+    <h3 class="section-head">Resumen de datos y resultados</h3>
+    <div class="table-wrap">
+      <table class="dtable" id="sumTable"></table>
+    </div>
+  </div>
+
+  <div class="card" id="resCteCard">
+    <h3 class="section-head">Verificación CTE DB-HE 2019</h3>
+    <div class="table-wrap">
+      <table class="dtable" id="resCte"></table>
+    </div>
+    <div class="notice notice-yellow">
+      <span class="notice__icon">!</span>
+      <span>Los elementos marcados como «No cumple» superan la transmitancia límite de la tabla 3.1.1.a-HE1 para la zona climática. Además del límite por elemento, el CTE exige cumplir el coeficiente global K de la envolvente, que esta herramienta no calcula.</span>
+    </div>
+  </div>
+
+  <div class="notes-box">
+    <strong>Método.</strong> Calefacción según UNE-EN 12831 simplificada: transmisión U·A·ΔT; suelo sobre el terreno con los factores fg1 = 1,45 y fg2 = (θint − θm,e)/(θint − θe); forjado sobre el aire exterior con U·A·ΔT, y sobre local no calefactado con el factor b = 0,5; puentes térmicos estimados en el 10 % de la transmisión; aire exterior como el mayor entre ventilación e infiltraciones (o infiltraciones más ventilación no recuperada si hay recuperador). Sin aportes solares ni internos en invierno. Refrigeración calculada hora a hora para el 21 de julio: posición del sol según la latitud, radiación de cielo despejado (ASHRAE), sombras por obstrucciones frente a cada fachada, temperatura exterior según la oscilación diaria, temperatura sol-aire con amortiguamiento y desfase en muros y cubierta, parte de la ganancia solar por ventanas retenida en la masa del edificio, y cargas sensibles y latentes de ocupantes y ventilación. Se toma la hora de carga máxima. Temperaturas exteriores de la guía IDAE (invierno 99 %, 99,6 % en uso sanitario; verano 1 %), corregidas en 0,65 °C cada 100 m de diferencia de altitud con la estación. La potencia recomendada incluye un <strong>margen del 15 %</strong>. Este cálculo es orientativo; para proyectos oficiales utiliza software reconocido (CYPETHERM, HULC, DesignBuilder, etc.).
+  </div>
+
+  <div class="actions no-print">
+    <button class="btn btn-ghost" onclick="nav(4)"><span class="arrow arrow-back">←</span> Modificar datos</button>
+    <div class="actions__group">
+      <button class="btn btn-dark" onclick="window.print()">Imprimir / PDF</button>
+      <button class="btn btn-primary" onclick="reset()">Nuevo cálculo</button>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer class="site-footer">
+  Herramienta orientativa · RITE, CTE DB-HE 2019, DB-HS3 y UNE-EN 12831
+</footer>
+
+</body>
+</html>

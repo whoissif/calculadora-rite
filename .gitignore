@@ -1,0 +1,11 @@
+# Configuración local de herramientas
+.claude/
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+
+# Documentos de referencia (no se publican)
+*.pdf
