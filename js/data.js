@@ -38,6 +38,29 @@ const CTE_LIM = {
   E:   { muro: 0.37, cub: 0.33, sue: 0.59, ven: 1.8 }
 };
 
+// Coeficiente global de transmisión de calor de la envolvente: K = ΣHx / Aint [W/m²K]
+// Valores límite de las tablas 3.1.1.b-HE1 (uso residencial privado) y 3.1.1.c-HE1 (resto de usos).
+// Las filas son la compacidad V/A de la envolvente: para 1 < V/A < 4 el límite se interpola.
+const K_LIM = {
+  residencial: {
+    // Edificios nuevos y ampliaciones
+    nuevo: {
+      va1: { 'α': 0.67, A: 0.60, B: 0.58, C: 0.53, D: 0.48, E: 0.43 },
+      va4: { 'α': 0.86, A: 0.80, B: 0.77, C: 0.72, D: 0.67, E: 0.62 }
+    },
+    // Cambios de uso y reformas en las que se renueve más del 25 % de la envolvente
+    reforma: {
+      va1: { 'α': 1.00, A: 0.87, B: 0.83, C: 0.73, D: 0.63, E: 0.54 },
+      va4: { 'α': 1.07, A: 0.94, B: 0.90, C: 0.81, D: 0.70, E: 0.62 }
+    }
+  },
+  // Edificios nuevos, ampliaciones, cambios de uso y reformas (una sola tabla para todos)
+  otros: {
+    va1: { 'α': 0.96, A: 0.81, B: 0.76, C: 0.65, D: 0.54, E: 0.43 },
+    va4: { 'α': 1.12, A: 0.98, B: 0.92, C: 0.82, D: 0.70, E: 0.59 }
+  }
+};
+
 // Soluciones constructivas típicas de la envolvente (U en W/m²K, g factor solar del vidrio)
 const ENV = {
   muro: [

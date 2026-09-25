@@ -21,7 +21,9 @@ const TIPOS = ['muro', 'cub', 'sue', 'ven'];
 
 const freshState = () => ({
   step: 1, zone: '', shading: false, tempsEdited: false,
-  sel: { muro: null, cub: null, sue: null, ven: null }
+  sel: { muro: null, cub: null, sue: null, ven: null },
+  base: null,     // línea base para comparar medidas de mejora
+  last: null      // último resultado calculado
 });
 let S = freshState();
 
@@ -243,6 +245,17 @@ function updDerived() {
    ENVOLVENTE
 ═══════════════════════════════════════════ */
 const curSuelo = () => $('sueloTipo').value;
+// Factor de reducción de temperatura del suelo inferior (UNE-EN 12831).
+// Es nulo sobre el terreno (se usan fg1 y fg2) y 1 sobre el aire exterior.
+const bSuelo = () => {
+  const t = curSuelo();
+  if (t === 'terreno') return null;
+  if (t === 'nocal') {
+    const b = num('fb');
+    return isFinite(b) ? Math.min(Math.max(b, 0.1), 1) : 0.5;
+  }
+  return 1.0;
+};
 const listFor = t => t === 'sue' ? ENV[SUELO[curSuelo()].opts] : ENV[t];
 const limKey = t => t === 'sue' ? SUELO[curSuelo()].lim : t;
 
@@ -309,6 +322,7 @@ function onSuelo() {
   const f = posFlags();
   $('grp-sue').classList.toggle('hidden', !f.floor);
   $('grp-cub').classList.toggle('hidden', !f.roof);
+  $('wrap-fb').classList.toggle('hidden', curSuelo() !== 'nocal');
   applyCteBadges();
   updateCtePanel();
   updDerived();
@@ -356,6 +370,20 @@ function applyCteBadges() {
 
 const CTE_NAMES = { muro: 'Muros (UM)', cub: 'Cubierta (UC)', ven: 'Huecos (UH)' };
 const cteName = t => t !== 'sue' ? CTE_NAMES[t] : ({ terreno: 'Suelo sobre terreno (UT)', aire: 'Suelo sobre aire exterior (US)', nocal: 'Suelo sobre local no habitable (UT)' })[curSuelo()];
+
+// Límite del coeficiente global K de la envolvente para una zona y una compacidad dadas.
+// Las tablas del CTE solo dan los extremos V/A ≤ 1 y V/A ≥ 4; en medio se interpola.
+function kLimite(zona, va, uso, proyecto) {
+  const letra = zona ? zona[0] : '';
+  const fila = uso === 'residencial'
+    ? (K_LIM.residencial[proyecto] || K_LIM.residencial.nuevo)
+    : K_LIM.otros;
+  const a = fila.va1[letra], b = fila.va4[letra];
+  if (!isFinite(a) || !isFinite(b)) return null;
+  if (va <= 1) return a;
+  if (va >= 4) return b;
+  return a + (b - a) * (va - 1) / 3;
+}
 
 function updateCtePanel() {
   const lim = CTE_LIM[S.zone[0]];
@@ -467,18 +495,23 @@ function validate(step) {
       !range('len-' + f.id, 0, 1e5) || !range('pct-' + f.id, 0, 90) || !range('obs-' + f.id, 0, 80) ||
       !range('int-' + f.id, 0, 1e5) || (num('int-' + f.id) || 0) > (num('len-' + f.id) || 0));
     ok = flag('e-per', badF) && ok;
+    if (posFlags().floor && curSuelo() === 'nocal') ok = flag('e-fb', !range('fb', 0.1, 1)) && ok;
   }
   if (step === 3) {
     activeTypes().forEach(t => {
       const it = item(t);
       ok = flag('e-' + t, !it || (it.custom && !customOk(it))) && ok;
     });
+    ok = flag('e-pt', !range('pt', 0, 30)) && ok;
   }
   if (step === 4) {
     ok = flag('e-nper', !range('nper', 1, 1e5)) && ok;
     ok = flag('e-tiW', !range('tiW', 18, 25)) && ok;
     ok = flag('e-tiS', !range('tiS', 21, 28)) && ok;
     ok = flag('e-hrS', !range('hrS', 30, 70)) && ok;
+    ok = flag('e-pSens', !range('pSens', 40, 200)) && ok;
+    ok = flag('e-pLat', !range('pLat', 20, 200)) && ok;
+    ok = flag('e-gains', !range('gains', 0, 100)) && ok;
     if ($('tipoEdi').value === 'residencial') ok = flag('e-nviv', !range('nviv', 1, 999)) && ok;
     if ($('vsis').value === 'rec') ok = flag('e-eta', !range('eta', 0, 95)) && ok;
   }
@@ -563,6 +596,19 @@ function doCalc() {
   const suelo = f.floor ? SUELO[f.suelo] : null;
 
   const qv = v.qv / 1000, qi = v.qi / 1000;   // m³/s
+
+  // ─── COEFICIENTE GLOBAL K DE LA ENVOLVENTE (CTE DB-HE1, tablas 3.1.1.b y 3.1.1.c)
+  // K = ΣHx / Aint, con Hx el coeficiente de transferencia de cada elemento de la envolvente
+  // y Aint la superficie de intercambio (la suma de esos mismos elementos). Los muros
+  // interiores no entran, porque no intercambian calor con el exterior.
+  const ptPct = Math.min(Math.max(num('pt'), 0), 30);
+  const Aint = g.wallA + g.winA + g.roofA + g.floorA;
+  const Htrans = Uw * g.wallA + Uv * g.winA + Uc * g.roofA + Us * g.floorA;
+  const Kval = Aint > 0 ? Htrans * (1 + ptPct / 100) / Aint : 0;
+  const compacidad = Aint > 0 ? g.vol / Aint : 0;
+  const esResidencial = $('tipoEdi').value === 'residencial';
+  const kLim = kLimite(S.zone, compacidad, esResidencial ? 'residencial' : 'otros', 'nuevo');
+  const kLimRef = esResidencial ? kLimite(S.zone, compacidad, 'residencial', 'reforma') : null;
   // Densidad del aire según la altitud (a 20 °C): 1,20 kg/m³ al nivel del mar, 1,11 kg/m³ en Madrid
   const P = pAtm(h);
   const RHO = P / (287.05 * 293.15), RHO_CP = RHO * CP_AIRE;
@@ -578,15 +624,16 @@ function doCalc() {
   const Qcc = Uc * g.roofA * dTc;
   const Qvc = Uv * g.winA * dTc;
   let Qfc = 0, fg2 = 0;
-  if (suelo && suelo.b === null) {
+  const bS = suelo ? bSuelo() : null;
+  if (suelo && bS === null) {
     // Suelo sobre el terreno: fg1 · fg2 · U · A · ΔT, con fg2 = (θint − θm,e) / (θint − θe)
     fg2 = dTc > 0 ? Math.max(TiW - c.Tm, 0) / dTc : 0;
     Qfc = FG1 * fg2 * Us * g.floorA * dTc;
   } else if (suelo) {
-    Qfc = suelo.b * Us * g.floorA * dTc;
+    Qfc = bS * Us * g.floorA * dTc;
   }
   const Qtr = Qwc + Qcc + Qvc + Qfc;
-  const Qpt = Qtr * 0.10;
+  const Qpt = Qtr * ptPct / 100;
   const Qac = qAirS * RHO_CP * dTc;
   const Qcal = Qtr + Qpt + Qac;
 
@@ -616,11 +663,12 @@ function doCalc() {
   const solMean = solInst.reduce((a, x) => a + x, 0) / 24;
   const solQ = solInst.map(q => inr.f * q + (1 - inr.f) * solMean);
 
-  const bSum = suelo && suelo.b !== null ? suelo.b : 0;       // en verano, el terreno no aporta carga
+  const bSum = suelo ? bS : 0;                 // en verano, el terreno no aporta carga
   const We = wFromWb(c.Ts, c.Twb, P), Wi = wFromRh(TiS, hr, P);
   const Qalr = Math.max(qAirL * RHO * HFG * (We - Wi), 0);
-  const nper = num('nper'), gW = +$('gains').value;
-  const Qps = nper * PERSONA.sens, Qpl = nper * PERSONA.lat;
+  const nper = num('nper'), gW = num('gains');
+  const pSens = num('pSens'), pLat = num('pLat');
+  const Qps = nper * pSens, Qpl = nper * pLat;
   const Qeq = gW * g.supT;
 
   const hours = sun.map((s, i) => {
@@ -641,7 +689,9 @@ function doCalc() {
   const Qref = Math.max(pk.Qsens, 0) + Qlat;
 
   render({
-    c, g, v, f, h, suelo, TiW, TiS, hr, dTc, fg2, Uw, Uc, Us, Uv, gv, nper, gW, qAirS, qAirL, We, Wi,
+    c, g, v, f, h, suelo, bS, ptPct, TiW, TiS, hr, dTc, fg2, Uw, Uc, Us, Uv, gv, nper, gW, pSens, pLat,
+    qAirS, qAirL, We, Wi,
+    Aint, Kval, compacidad, kLim, kLimRef,
     Qwc, Qcc, Qvc, Qfc, Qpt, Qac, Qcal,
     pk, hours, Qalr, Qps, Qpl, Qeq, Qsens: pk.Qsens, Qlat, Qref,
     Prc: Qcal * MARGEN / 1000, Prr: Qref * MARGEN / 1000
@@ -656,6 +706,7 @@ const kw = v => fmt(v / 1000, 2);
 
 function render(r) {
   const { c, g, v, pk } = r;
+  S.last = r;
 
   $('rCalKw').textContent = kw(r.Qcal);
   $('rCalRec').textContent = `Potencia recomendada (+15 %): ${fmt(r.Prc, 2)} kW`;
@@ -671,7 +722,7 @@ function render(r) {
     { n: 'Cubierta', v: r.Qcc },
     { n: floorLbl, v: r.Qfc },
     { n: 'Ventanas', v: r.Qvc },
-    { n: 'Puentes térmicos (10 %)', v: r.Qpt },
+    { n: `Puentes térmicos (${fmt(r.ptPct, 0)} %)`, v: r.Qpt },
     { n: airLbl, v: r.Qac }
   ], r.Qcal, 'fill-heat');
 
@@ -683,8 +734,8 @@ function render(r) {
     { n: floorLbl, v: pk.Qfr },
     { n: 'Aire exterior — sensible', v: pk.Qasr },
     { n: 'Aire exterior — latente', v: r.Qalr },
-    { n: `Personas — sensible (${r.nper} × ${PERSONA.sens} W)`, v: r.Qps },
-    { n: `Personas — latente (${r.nper} × ${PERSONA.lat} W)`, v: r.Qpl },
+    { n: `Personas — sensible (${r.nper} × ${r.pSens} W)`, v: r.Qps },
+    { n: `Personas — latente (${r.nper} × ${r.pLat} W)`, v: r.Qpl },
     { n: `Iluminación y equipos (${r.gW} W/m²)`, v: r.Qeq }
   ], r.Qref, 'fill-cool');
 
@@ -694,7 +745,7 @@ function render(r) {
   const Uwm = u => `U = ${fmt(u, 2)} W/m²K`;
   const facTxt = g.faces.filter(fc => fc.lenExt > 0 || fc.lenInt > 0)
     .map(fc => `${rumbo(fc.az)} ${fmt(fc.lenExt)} m${fc.lenInt > 0 ? ` (+${fmt(fc.lenInt)} m interior)` : ''} · ${fmt(fc.pct, 0)} %${fc.obs ? ` · obstr. ${fmt(fc.obs, 0)}°` : ''}`).join('<br>');
-  const floorHc = !r.suelo ? '' : r.suelo.b === null ? `${Uwm(r.Us)} · fg1·fg2 = ${fmt(FG1 * r.fg2, 2)}` : `${Uwm(r.Us)} · b = ${fmt(r.suelo.b, 1)}`;
+  const floorHc = !r.suelo ? '' : r.bS === null ? `${Uwm(r.Us)} · fg1·fg2 = ${fmt(FG1 * r.fg2, 2)}` : `${Uwm(r.Us)} · b = ${fmt(r.bS, 2)}`;
   $('sumTable').innerHTML = `
     <thead><tr><th>Parámetro</th><th>Valor</th><th class="r heat-c">Calefacción</th><th class="r cool-c">Refrigeración</th></tr></thead>
     <tbody>
@@ -711,12 +762,12 @@ function render(r) {
     ${row('Muros exteriores', `${fmt(g.wallA, 0)} m²`, Uwm(r.Uw), `absortividad ${fmt(COLOR[$('color').value], 1)}`)}
     ${row('Ventanas', `${fmt(g.winA, 0)} m² (${fmt(g.fac ? g.winA / g.fac * 100 : 0, 0)} % fachada)`, Uwm(r.Uv), `g = ${fmt(r.gv, 2)}${S.shading ? ' · con protección' : ''}`)}
     ${g.roofA ? row('Cubierta', `${fmt(g.roofA, 0)} m²`, Uwm(r.Uc), `absortividad ${fmt(COLOR[$('color').value], 1)}`) : ''}
-    ${g.floorA ? row(r.suelo.label, `${fmt(g.floorA, 0)} m²`, floorHc, r.suelo.b === null ? '—' : `b = ${fmt(r.suelo.b, 1)}`) : ''}
+    ${g.floorA ? row(r.suelo.label, `${fmt(g.floorA, 0)} m²`, floorHc, r.bS === null ? '—' : `b = ${fmt(r.bS, 2)}`) : ''}
     ${row('Ventilación', `${fmt(v.qv)} l/s`, v.desc, '')}
     ${row('Infiltraciones', `${$('estanq').value.replace('.', ',')} ren/h → ${fmt(v.qi)} l/s`)}
     ${row('Aire exterior de cálculo', v.rec ? `Mayor de ventilación e infiltraciones · recuperador sensible ${fmt(v.eta * 100, 0)} %` : 'Mayor de ventilación e infiltraciones', `${fmt(r.qAirS * 1000)} l/s${v.rec ? ' equivalentes' : ''}`, `${fmt(r.qAirS * 1000)} l/s sens. · ${fmt(r.qAirL * 1000)} l/s lat.`)}
     ${row('Humedad específica', '—', '', `ext. ${fmt(r.We * 1000)} g/kg · int. ${fmt(r.Wi * 1000)} g/kg`)}
-    ${row('Ocupación y equipos', `${r.nper} personas · ${r.gW} W/m²`, '', `${kw(r.Qps + r.Qpl + r.Qeq)} kW`)}
+    ${row('Ocupación y equipos', `${r.nper} personas (${r.pSens} W sens. + ${r.pLat} W lat.) · ${r.gW} W/m²`, '', `${kw(r.Qps + r.Qpl + r.Qeq)} kW`)}
     <tr class="total"><td colspan="2">Carga total de diseño</td><td class="r heat-c">${kw(r.Qcal)} kW</td><td class="r cool-c">${kw(r.Qref)} kW</td></tr>
     <tr class="total"><td colspan="2">Potencia recomendada (+15 %)</td><td class="r heat-c">${fmt(r.Prc, 2)} kW</td><td class="r cool-c">${fmt(r.Prr, 2)} kW</td></tr>
     </tbody>`;
@@ -730,6 +781,152 @@ function render(r) {
       <td class="r"><span class="cte-tag ${ok ? 'cte-ok' : 'cte-ko'}">${ok ? '✓ Cumple' : '✗ No cumple'}</span></td></tr>`;
   });
   $('resCte').innerHTML = cteHTML + '</tbody>';
+
+  // Coeficiente global K de la envolvente
+  const kOk = r.kLim === null ? null : r.Kval <= r.kLim;
+  const tablaK = $('tipoEdi').value === 'residencial' ? 'b' : 'c';
+  $('resK').innerHTML = r.kLim === null ? '' :
+    `<div class="cte-row">
+       <span class="cte-row__name">Coeficiente global de la envolvente (tabla 3.1.1.${tablaK} -HE1)</span>
+       <div class="cte-row__vals">
+         <span class="cte-row__u">K = ${fmt(r.Kval, 2)} W/m²K</span>
+         <span class="cte-row__lim">A<sub>int</sub> = ${fmt(r.Aint, 0)} m² · V/A = ${fmt(r.compacidad, 2)} m³/m²</span>
+         <span class="cte-row__lim">Límite: ${fmt(r.kLim, 2)}</span>
+         <span class="cte-tag ${kOk ? 'cte-ok' : 'cte-ko'}">${kOk ? '✓ Cumple' : '✗ No cumple'}</span>
+       </div>
+     </div>` +
+    (r.kLimRef !== null
+      ? `<p class="adv__note">En un edificio nuevo el límite aplicable es ${fmt(r.kLim, 2)} W/m²K. Si se trata de un cambio de uso o de una reforma que renueve más del 25 % de la envolvente, el límite sube a ${fmt(r.kLimRef, 2)} W/m²K.</p>`
+      : '');
+  renderCmp();
+}
+
+/* ═══════════════════════════════════════════
+   COMPARACIÓN CON UNA LÍNEA BASE
+   Permite fijar el cálculo actual como referencia y medir el efecto de
+   cualquier cambio (aislamiento, lamas, temperaturas, ocupación...) sin
+   apuntar los números a mano.
+══════════════════════════════════════════ */
+const descSolucion = t => {
+  const it = item(t);
+  if (!it) return '—';
+  return it.custom
+    ? `U = ${fmt(it.U, 2)} W/m²K${it.g !== undefined ? ` · g = ${fmt(it.g, 2)}` : ''}`
+    : it.title;
+};
+
+// Retrato de los datos de entrada, para poder decir qué ha cambiado
+function parametros() {
+  const gr = num('giro') || 0;
+  const p = curProv();
+  const sel = id => $(id).selectedOptions[0].text;
+  const P = {
+    provincia: ['Provincia', p ? p.name : '—'],
+    altitud: ['Altitud', num('alti'), 'm'],
+    uso: ['Uso del edificio', sel('tipoEdi')],
+    anio: ['Año de construcción', sel('anio')],
+    posicion: ['Posición en el edificio', sel('posicion')],
+    suelotipo: ['Suelo inferior', sel('sueloTipo')],
+    sup: ['Superficie por planta', num('sup'), 'm²'],
+    npl: ['Número de plantas', +$('npl').value],
+    alt: ['Altura libre por planta', num('alt'), 'm'],
+    giro: ['Giro respecto al norte', num('giro'), '°'],
+    muro: ['Muro exterior', descSolucion('muro')],
+    cub: ['Cubierta', descSolucion('cub')],
+    sue: ['Suelo', descSolucion('sue')],
+    ven: ['Ventanas', descSolucion('ven')],
+    proteccion: ['Protección solar exterior', S.shading ? 'Sí' : 'No'],
+    color: ['Color exterior', sel('color')],
+    inercia: ['Inercia térmica', sel('inercia')],
+    tiW: ['T interior de invierno', num('tiW'), '°C'],
+    tiS: ['T interior de verano', num('tiS'), '°C'],
+    hrS: ['Humedad relativa de verano', num('hrS'), '%'],
+    tWin: ['T exterior de invierno', num('tWin'), '°C'],
+    tSum: ['T exterior de verano', num('tSum'), '°C'],
+    tDr: ['Oscilación diaria de verano', num('tDr'), '°C'],
+    tMed: ['T media anual', num('tMed'), '°C'],
+    lat: ['Latitud', num('tLat'), '°'],
+    nper: ['Ocupantes', num('nper')],
+    pSens: ['Ganancia sensible por ocupante', num('pSens'), 'W'],
+    pLat: ['Ganancia latente por ocupante', num('pLat'), 'W'],
+    gains: ['Iluminación y equipos', num('gains'), 'W/m²'],
+    pt: ['Puentes térmicos', num('pt'), '% de la transmisión'],
+    fb: ['Factor b del local inferior', curSuelo() === 'nocal' ? num('fb') : '—'],
+    estanq: ['Estanqueidad', sel('estanq')],
+    vsis: ['Sistema de ventilación', sel('vsis')],
+    eta: ['Eficiencia del recuperador', num('eta'), '%']
+  };
+  if ($('tipoEdi').value === 'residencial') {
+    P.nviv = ['Número de viviendas', num('nviv')];
+    P.ndor = ['Dormitorios por vivienda', sel('ndor')];
+  } else {
+    P.ida = ['Calidad del aire interior', sel('ida')];
+  }
+  FACHADAS.forEach(f => {
+    const r = rumbo(f.az + gr);
+    P['len' + f.id] = [`Longitud de muro ${r}`, num('len-' + f.id), 'm'];
+    P['int' + f.id] = [`Muro interior o medianera ${r}`, num('int-' + f.id), 'm'];
+    P['pct' + f.id] = [`Acristalamiento ${r}`, num('pct-' + f.id), '%'];
+    P['obs' + f.id] = [`Obstrucción ${r}`, num('obs-' + f.id), '°'];
+  });
+  return P;
+}
+
+const fmtPar = p => {
+  if (!p) return '—';
+  const v = typeof p[1] === 'number' && isFinite(p[1]) ? fmt(p[1], 1) : p[1];
+  return p[2] ? `${v} ${p[2]}` : String(v);
+};
+
+function diffParametros(antes, ahora) {
+  return Object.keys(ahora)
+    .filter(k => String((antes[k] || [])[1]) !== String(ahora[k][1]))
+    .map(k => ({ etiqueta: ahora[k][0], antes: antes[k], ahora: ahora[k] }));
+}
+
+function setBase() {
+  if (!S.last) return;
+  S.base = { r: S.last, par: parametros(), cuando: new Date() };
+  renderCmp();
+}
+
+function quitarBase() {
+  S.base = null;
+  renderCmp();
+}
+
+function renderCmp() {
+  const card = $('cmpCard');
+  if (!S.base || !S.last) { card.classList.add('hidden'); return; }
+  card.classList.remove('hidden');
+  const b = S.base.r, a = S.last;
+  // En cargas de diseño, bajar siempre es mejorar
+  const dif = (x, y) => {
+    const d = y - x, pct = x !== 0 ? d / Math.abs(x) * 100 : 0;
+    const cls = d < -0.005 ? 'cmp-mejora' : d > 0.005 ? 'cmp-empeora' : '';
+    const signo = d > 0 ? '+' : d < 0 ? '−' : '';
+    return `<span class="${cls}">${signo}${fmt(Math.abs(d), 2)} kW (${signo}${fmt(Math.abs(pct), 1)} %)</span>`;
+  };
+  const fila = (n, x, y) =>
+    `<tr><td>${n}</td><td class="r">${fmt(x, 2)} kW</td><td class="r">${fmt(y, 2)} kW</td><td class="r">${dif(x, y)}</td></tr>`;
+  $('cmpTable').innerHTML = `<thead><tr><th>Concepto</th><th class="r">Línea base</th><th class="r">Cálculo actual</th><th class="r">Diferencia</th></tr></thead><tbody>
+    ${fila('Calefacción', b.Qcal / 1000, a.Qcal / 1000)}
+    ${fila('Refrigeración', b.Qref / 1000, a.Qref / 1000)}
+    ${fila('Refrigeración sensible', b.Qsens / 1000, a.Qsens / 1000)}
+    ${fila('Refrigeración latente', b.Qlat / 1000, a.Qlat / 1000)}
+    ${fila('Potencia recomendada de calefacción (+15 %)', b.Prc, a.Prc)}
+    ${fila('Potencia recomendada de refrigeración (+15 %)', b.Prr, a.Prr)}
+    </tbody>`;
+  $('cmpSub').textContent = 'Línea base fijada el ' + S.base.cuando.toLocaleString('es-ES') +
+    '. Cambia lo que quieras y vuelve a calcular para ver el efecto de cada medida.';
+  const camb = diffParametros(S.base.par, parametros());
+  $('cmpDiff').innerHTML = camb.length
+    ? `<div class="section-head" style="margin:26px 0 12px">Datos que han cambiado</div>
+       <div class="table-wrap"><table class="dtable">
+         <thead><tr><th>Parámetro</th><th>Línea base</th><th>Cálculo actual</th></tr></thead>
+         <tbody>${camb.map(x => `<tr><td>${x.etiqueta}</td><td>${fmtPar(x.antes)}</td><td>${fmtPar(x.ahora)}</td></tr>`).join('')}</tbody>
+       </table></div>`
+    : '<p class="adv__note" style="margin-top:18px">No ha cambiado ningún dato respecto a la línea base.</p>';
 }
 
 function mkBk(items, total, cls) {
@@ -767,7 +964,9 @@ function mkBk(items, total, cls) {
    NUEVO CÁLCULO
 ═══════════════════════════════════════════ */
 function reset() {
+  const base = S.base;      // la línea base se conserva a propósito: sirve para comparar
   S = freshState();
+  S.base = base;
   // Cada select vuelve a su opción marcada como "selected" en el HTML (o la primera)
   document.querySelectorAll('select').forEach(el => {
     const i = [...el.options].findIndex(o => o.defaultSelected);
@@ -786,5 +985,6 @@ function reset() {
   onPos();
   onAnio();
   refreshZone();
+  renderCmp();
   nav(1);
 }

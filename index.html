@@ -202,6 +202,12 @@
           <option value="nocal">Un local no calefactado cerrado (garaje, sótano)</option>
         </select>
       </div>
+      <div class="field hidden" id="wrap-fb">
+        <label for="fb">Factor b del local inferior</label>
+        <input type="number" id="fb" min="0.1" max="1" step="0.05" value="0.5" oninput="updDerived()">
+        <div class="hint">UNE-EN 12831: salto térmico del local no calefactado dividido por el del exterior. 0,5 para un garaje cerrado; 1 si está muy ventilado.</div>
+        <span class="err-txt" id="e-fb">Entre 0,1 y 1</span>
+      </div>
       <div class="field">
         <label for="sup">Superficie útil por planta <span class="unit">(m²)</span></label>
         <input type="number" id="sup" min="10" max="99999" placeholder="120" oninput="updDerived()">
@@ -326,10 +332,16 @@
         </select>
         <div class="hint">Parte de la radiación solar se almacena en la masa del edificio</div>
       </div>
+      <div class="field">
+        <label for="pt">Puentes térmicos <span class="unit">(% de la transmisión)</span></label>
+        <input type="number" id="pt" min="0" max="30" step="1" value="10">
+        <div class="hint">Estimación habitual en vivienda. Ponlo a 0 si los has calculado aparte; también entra en el coeficiente global K.</div>
+        <span class="err-txt" id="e-pt">Entre 0 y 30 %</span>
+      </div>
     </div>
 
     <div class="cte-panel hidden" id="ctePanel">
-      <div class="cte-panel__head">Verificación CTE DB-HE 2019 · transmitancias límite (tabla 3.1.1.a-HE1)</div>
+      <div class="cte-panel__head">Verificación CTE DB-HE 2019 · transmitancias límite (tabla 3.1.1.a-HE1) y coeficiente global K</div>
       <div id="ctePanelRows"></div>
     </div>
 
@@ -426,15 +438,23 @@
         <div class="hint">Eficiencia sensible, según la ficha técnica del equipo</div>
         <span class="err-txt" id="e-eta">Entre 0 y 95 %</span>
       </div>
+      <div class="field">
+        <label for="pSens">Ganancia sensible por ocupante <span class="unit">(W)</span></label>
+        <input type="number" id="pSens" min="40" max="200" step="5" value="75">
+        <div class="hint">Sentado, trabajo ligero: 70–80 W</div>
+        <span class="err-txt" id="e-pSens">Entre 40 y 200 W</span>
+      </div>
+      <div class="field">
+        <label for="pLat">Ganancia latente por ocupante <span class="unit">(W)</span></label>
+        <input type="number" id="pLat" min="20" max="200" step="5" value="55">
+        <div class="hint">Sentado, trabajo ligero: 45–60 W</div>
+        <span class="err-txt" id="e-pLat">Entre 20 y 200 W</span>
+      </div>
       <div class="field col2">
-        <label for="gains">Ganancias internas — iluminación y equipos</label>
-        <select id="gains">
-          <option value="5">Baja — residencial poco equipado: ~5 W/m²</option>
-          <option value="8" selected>Media — residencial normal: ~8 W/m²</option>
-          <option value="12">Media-alta — pequeñas oficinas: ~12 W/m²</option>
-          <option value="18">Alta — oficinas con equipos: ~18 W/m²</option>
-          <option value="25">Muy alta — comercio / restauración: ~25 W/m²</option>
-        </select>
+        <label for="gains">Iluminación y equipos <span class="unit">(W/m²)</span></label>
+        <input type="number" id="gains" min="0" max="100" step="0.5" value="8">
+        <div class="hint">Residencial poco equipado 5 · residencial normal 8 · pequeñas oficinas 12 · oficinas con equipos 18 · comercio 25</div>
+        <span class="err-txt" id="e-gains">Entre 0 y 100 W/m²</span>
       </div>
     </div>
 
@@ -491,24 +511,39 @@
     </div>
   </div>
 
+  <div class="card hidden" id="cmpCard">
+    <h3 class="section-head">Comparación con la línea base</h3>
+    <p class="card__sub" id="cmpSub"></p>
+    <div class="table-wrap">
+      <table class="dtable" id="cmpTable"></table>
+    </div>
+    <div id="cmpDiff"></div>
+    <div class="actions no-print">
+      <div></div>
+      <button class="btn btn-ghost" onclick="quitarBase()">Quitar línea base</button>
+    </div>
+  </div>
+
   <div class="card" id="resCteCard">
     <h3 class="section-head">Verificación CTE DB-HE 2019</h3>
     <div class="table-wrap">
       <table class="dtable" id="resCte"></table>
     </div>
+    <div id="resK"></div>
     <div class="notice notice-yellow">
       <span class="notice__icon">!</span>
-      <span>Los elementos marcados como «No cumple» superan la transmitancia límite de la tabla 3.1.1.a-HE1 para la zona climática. Además del límite por elemento, el CTE exige cumplir el coeficiente global K de la envolvente, que esta herramienta no calcula.</span>
+      <span>Los elementos marcados como «No cumple» superan la transmitancia límite de la tabla 3.1.1.a-HE1 para la zona climática. Además del límite por elemento, el CTE exige cumplir el coeficiente global <strong>K</strong> de la envolvente, que se comprueba arriba contra las tablas 3.1.1.b y 3.1.1.c. El CTE permite superar los valores de la tabla 3.1.1.a si se cumple el límite de K.</span>
     </div>
   </div>
 
   <div class="notes-box">
-    <strong>Método.</strong> Calefacción según UNE-EN 12831 simplificada: transmisión U·A·ΔT; suelo sobre el terreno con los factores fg1 = 1,45 y fg2 = (θint − θm,e)/(θint − θe); forjado sobre el aire exterior con U·A·ΔT, y sobre local no calefactado con el factor b = 0,5; puentes térmicos estimados en el 10 % de la transmisión; aire exterior como el mayor entre ventilación e infiltraciones, con la recuperación sensible del doble flujo aplicada a la fracción de caudal que pasa por el intercambiador (el recuperador no recupera humedad, de modo que la carga latente no varía). Sin aportes solares ni internos en invierno. Refrigeración calculada hora a hora para el 21 de julio: posición del sol según la latitud, radiación de cielo despejado (ASHRAE), sombras por obstrucciones frente a cada fachada, temperatura exterior según la oscilación diaria, temperatura sol-aire con amortiguamiento y desfase en muros y cubierta, parte de la ganancia solar por ventanas retenida en la masa del edificio, y cargas sensibles y latentes de ocupantes y ventilación. Se toma la hora de carga máxima. Temperaturas exteriores de la guía IDAE (invierno 99 %, 99,6 % en uso sanitario; verano 1 %), corregidas en 0,65 °C cada 100 m de diferencia de altitud con la estación. La potencia recomendada incluye un <strong>margen del 15 %</strong>. Este cálculo es orientativo; para proyectos oficiales utiliza software reconocido (CYPETHERM, HULC, DesignBuilder, etc.).
+    <strong>Método.</strong> Calefacción según UNE-EN 12831 simplificada: transmisión U·A·ΔT; suelo sobre el terreno con los factores fg1 = 1,45 y fg2 = (θint − θm,e)/(θint − θe); forjado sobre el aire exterior con U·A·ΔT, y sobre local no calefactado con el factor b = 0,5; puentes térmicos estimados como un porcentaje de la transmisión (10 % por defecto, configurable); aire exterior como el mayor entre ventilación e infiltraciones, con la recuperación sensible del doble flujo aplicada a la fracción de caudal que pasa por el intercambiador (el recuperador no recupera humedad, de modo que la carga latente no varía). Sin aportes solares ni internos en invierno. Refrigeración calculada hora a hora para el 21 de julio: posición del sol según la latitud, radiación de cielo despejado (ASHRAE), sombras por obstrucciones frente a cada fachada, temperatura exterior según la oscilación diaria, temperatura sol-aire con amortiguamiento y desfase en muros y cubierta, parte de la ganancia solar por ventanas retenida en la masa del edificio, y cargas sensibles y latentes de ocupantes y ventilación. Se toma la hora de carga máxima. Temperaturas exteriores de la guía IDAE (invierno 99 %, 99,6 % en uso sanitario; verano 1 %), corregidas en 0,65 °C cada 100 m de diferencia de altitud con la estación. La potencia recomendada incluye un <strong>margen del 15 %</strong>. Este cálculo es orientativo; para proyectos oficiales utiliza software reconocido (CYPETHERM, HULC, DesignBuilder, etc.).
   </div>
 
   <div class="actions no-print">
     <button class="btn btn-ghost" onclick="nav(4)"><span class="arrow arrow-back">←</span> Modificar datos</button>
     <div class="actions__group">
+      <button class="btn btn-ghost" onclick="setBase()">Fijar como línea base</button>
       <button class="btn btn-dark" onclick="window.print()">Imprimir / PDF</button>
       <button class="btn btn-primary" onclick="reset()">Nuevo cálculo</button>
     </div>

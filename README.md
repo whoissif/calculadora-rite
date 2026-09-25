@@ -13,15 +13,16 @@ El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compil
 - **Asistente paso a paso**: cuatro pasos pensados para instaladores sin experiencia en cálculo.
 - **Zona climática CTE** a partir de la provincia y la altitud (tabla a-Anejo B del DB-HE 2019), incluida la zona α de Canarias.
 - **Temperaturas exteriores de proyecto** de la guía técnica del IDAE a la que remite el RITE (104 estaciones), con corrección por altitud. Son editables.
-- **Envolvente térmica**: muros, cubierta, suelo y ventanas, con comprobación de la transmitancia límite del CTE DB-HE 2019. Se preselecciona una envolvente típica según el año de construcción, y cada elemento admite un valor de U (y g en ventanas) conocido.
+- **Envolvente térmica**: muros, cubierta, suelo y ventanas, con comprobación de la transmitancia límite del CTE DB-HE 2019 y del **coeficiente global K** de la envolvente. Se preselecciona una envolvente típica según el año de construcción, y cada elemento admite un valor de U (y g en ventanas) conocido.
 - **Posición en el edificio**: edificio completo, última planta, planta más baja o planta intermedia.
-- **Suelo inferior** sobre el terreno, sobre el aire exterior (porche, garaje abierto, voladizo) o sobre un local no calefactado.
+- **Suelo inferior** sobre el terreno, sobre el aire exterior (porche, garaje abierto, voladizo) o sobre un local no calefactado, con el factor b editable.
 - **Fachadas por orientación**: longitud total de muro, la parte que no da al exterior (medianeras y paredes con otros locales calefactados, que se descuentan solas), porcentaje de acristalamiento y ángulo de obstrucción de los edificios de enfrente en cada una de las cuatro fachadas, con giro del edificio respecto al norte.
 - **Ventilación**: CTE DB-HS3 en viviendas, RITE IT 1.1.4.2 (IDA, caudal por persona) en el resto de usos, con o sin recuperador de calor.
+- **Cargas internas editables**: ganancia sensible y latente por ocupante, y densidad de potencia de iluminación y equipos.
 - **Calefacción** (UNE-EN 12831 simplificada):
   - Transmisión por muros, cubierta y ventanas.
-  - Suelo sobre el terreno con los factores fg1 y fg2; forjado sobre el aire exterior con U·A·ΔT; sobre local no calefactado con el factor b.
-  - Puentes térmicos (10 % de la transmisión).
+  - Suelo sobre el terreno con los factores fg1 y fg2; forjado sobre el aire exterior con U·A·ΔT; sobre local no calefactado con el factor b, que se puede ajustar.
+  - Puentes térmicos como porcentaje de la transmisión (10 % por defecto, configurable).
   - Aire exterior: el mayor entre ventilación e infiltraciones; con doble flujo se aplica la recuperación sensible a la fracción de caudal que pasa por el intercambiador (la carga latente no varía, porque el recuperador no recupera humedad).
 - **Refrigeración**, calculada hora a hora para el 21 de julio, tomando la hora de carga máxima:
   - Posición del sol según la latitud y radiación de cielo despejado (ASHRAE) sobre cada fachada y la cubierta.
@@ -32,6 +33,7 @@ El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compil
   - Carga sensible y latente de ocupantes y aire exterior, con la densidad y la presión del aire según la altitud.
   - Iluminación y equipos.
 - **Margen de seguridad** del 15 % sobre la carga calculada.
+- **Comparación con una línea base**: fija el cálculo actual como referencia, cambia lo que quieras y mide el efecto de cada medida (aislamiento, lamas, temperaturas, ocupación) en kW y en porcentaje, con la lista de datos que han cambiado.
 - **Informe imprimible** desde el navegador.
 - **HTML, CSS y JavaScript sin dependencias**: sin frameworks, sin compilación, sin servidor.
 
@@ -47,11 +49,12 @@ El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compil
 | Ventilación en otros usos | RITE IT 1.1.4.2, tabla 1.4.2.1 (l/s por persona según IDA) |
 | Recuperación de calor | RITE IT 1.2.4.5.2: obligatoria si el aire expulsado supera 0,5 m³/s |
 | Transmitancias límite | CTE DB-HE 2019, tabla 3.1.1.a-HE1 |
+| Coeficiente global K | CTE DB-HE 2019, tablas 3.1.1.b-HE1 (residencial privado) y 3.1.1.c-HE1 (resto de usos), con el límite interpolado según la compacidad V/A |
 | Pérdidas de calefacción | UNE-EN 12831 (simplificada) |
 | Radiación solar | ASHRAE, cielo despejado de julio (A = 1085 W/m², B = 0,207, C = 0,136) |
 | Perfil diario de temperatura | ASHRAE, fracciones de la oscilación diaria; oscilación de la guía IDAE |
 
-La herramienta no calcula el coeficiente global K de la envolvente que también exige el CTE.
+El coeficiente global se calcula como K = ΣHx / Aint, con los puentes térmicos incluidos en el numerador con el mismo porcentaje que en el cálculo de cargas. Los muros interiores no entran en la superficie de intercambio, porque no intercambian calor con el exterior.
 
 ## Estructura del proyecto
 

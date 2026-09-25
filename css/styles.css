@@ -532,6 +532,10 @@ input[type="range"] { flex: 1; cursor: pointer; accent-color: var(--accent); }
 .dtable .total td { background: var(--bg); font-weight: 700; color: var(--navy); border-bottom: none; }
 .dtable .total + .total td { border-top: 1px solid var(--border); }
 
+/* Comparación con la línea base: en cargas de diseño, bajar es mejorar */
+.cmp-mejora { color: var(--ok); font-weight: 600; }
+.cmp-empeora { color: var(--err); font-weight: 600; }
+
 /* ─────────────────────────────────────────────
    NOTAS
 ───────────────────────────────────────────── */

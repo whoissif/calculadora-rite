@@ -50,7 +50,8 @@ const API = new Function('document', 'window', 'Option', fuente + `
   return { get S(){return S;}, doCalc, reset, geometry, ventilation, solarDay, pAtm, wFromWb, wFromRh,
            onProv, onUso, onAnio, onPos, onSuelo, onZone, onTempEdit, onAnio, refreshZone, updVent,
            updDerived, updFacades, pickOpt, item, toggleSh, validate, nav, setStep, climate,
-           D: () => ({ PROV, ZONAS, ENV, ENV_BY_YEAR, CTE_LIM, USO, IDA, SUELO, HS3, PERFIL_T, SOL, INERCIA, RUMBOS }),
+           setBase, quitarBase, renderCmp, parametros, diffParametros, kLimite,
+           D: () => ({ PROV, ZONAS, ENV, ENV_BY_YEAR, CTE_LIM, USO, IDA, SUELO, HS3, PERFIL_T, SOL, INERCIA, RUMBOS, K_LIM }),
            LIM: () => CTE_LIM, ZW: () => ZW };
 `)(document, window, Option);
 
@@ -181,6 +182,24 @@ test('todas las columnas de la tabla de fachadas tienen su campo', () => {
     assert(val('int-' + f.id) !== undefined, `int-${f.id}`);
     assert(val('pct-' + f.id) !== undefined, `pct-${f.id}`);
   });
+});
+test('el HTML no tiene etiquetas sin cerrar ni mal anidadas', () => {
+  const src = html.replace(/<!--[\s\S]*?-->/g, '');
+  const VOID = new Set(['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta',
+    'param', 'source', 'track', 'wbr', 'path', 'rect', 'circle', 'stop', 'use', 'polygon', 'line', 'polyline', 'ellipse']);
+  const pila = [], errores = [];
+  for (const m of src.matchAll(/<(\/?)([a-zA-Z][\w-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g)) {
+    const name = m[2].toLowerCase();
+    if (VOID.has(name) || m[4]) continue;
+    if (!m[1]) pila.push(name);
+    else {
+      if (!pila.length) { errores.push(`</${name}> sobra`); continue; }
+      const abierta = pila.pop();
+      if (abierta !== name) errores.push(`<${abierta}> cerrada por </${name}>`);
+    }
+  }
+  pila.forEach(t => errores.push(`<${t}> sin cerrar`));
+  eq(errores.join('; '), '');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════ */
@@ -430,6 +449,292 @@ test('la obstrucción reduce la radiación directa', () => {
   const libre = API.solarDay(40.4, [{ id: 'S', az: 180, obs: 0 }])[12].faces.S.opaque;
   const tapado = API.solarDay(40.4, [{ id: 'S', az: 180, obs: 60 }])[12].faces.S.opaque;
   assert(tapado < libre, `la obstrucción no reduce la radiación: ${tapado} vs ${libre}`);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+grupoDe('G · comparación con la línea base');
+
+test('sin línea base la tarjeta está oculta', () => {
+  escenarioMadrid();
+  API.doCalc();
+  eq(API.S.base, null, 'no debe haber línea base');
+  assert(get('cmpCard').classList.contains('hidden'), 'la tarjeta debe estar oculta');
+});
+
+test('fijar la línea base la muestra y no inventa diferencias', () => {
+  escenarioMadrid();
+  API.doCalc();
+  API.setBase();
+  assert(!get('cmpCard').classList.contains('hidden'), 'la tarjeta debe mostrarse');
+  assert(/No ha cambiado ningún dato/.test(htmlDe('cmpDiff')), 'no debe haber datos modificados');
+});
+
+test('el efecto de una medida de mejora se calcula y se colorea', () => {
+  escenarioMadrid({ anio: 'pre1980' });
+  set('anio', 'pre1980'); API.onAnio(); set('estanq', '0.80');
+  API.doCalc();
+  API.setBase();
+  const baseCal = API.S.base.r.Qcal, baseRef = API.S.base.r.Qref;
+
+  // medida: cambiar la envolvente por una de obra nueva
+  set('anio', 'post19'); API.onAnio(); set('estanq', '0.30');
+  API.doCalc();
+  const ahoraCal = API.S.last.Qcal, ahoraRef = API.S.last.Qref;
+
+  assert(ahoraCal < baseCal, `la calefacción debe bajar: ${ahoraCal} vs ${baseCal}`);
+  assert(ahoraRef < baseRef, `la refrigeración debe bajar: ${ahoraRef} vs ${baseRef}`);
+  assert(/cmp-mejora/.test(htmlDe('cmpTable')), 'las mejoras deben marcarse en verde');
+  assert(!/cmp-empeora/.test(htmlDe('cmpTable')), 'no debería haber empeoramientos');
+
+  // el porcentaje mostrado debe coincidir con el calculado
+  const pct = (baseCal - ahoraCal) / baseCal * 100;
+  const esperado = pct.toFixed(1).replace('.', ',');
+  assert(htmlDe('cmpTable').includes(esperado), `no aparece el porcentaje ${esperado} % en la tabla`);
+});
+
+test('la tabla de la línea base conserva los valores de partida', () => {
+  escenarioMadrid({ anio: 'pre1980' });
+  set('anio', 'pre1980'); API.onAnio(); set('estanq', '0.80');
+  API.doCalc();
+  const baseCal = API.S.last.Qcal / 1000;
+  API.setBase();
+  set('anio', 'post19'); API.onAnio(); API.doCalc();
+  const texto = baseCal.toFixed(2).replace('.', ',');
+  assert(htmlDe('cmpTable').includes(texto), `la tabla no muestra el valor de la línea base ${texto}`);
+});
+
+test('los datos modificados se listan', () => {
+  escenarioMadrid();
+  API.doCalc();
+  API.setBase();
+  set('pct-S', 60);
+  set('int-N', 4);
+  API.doCalc();
+  const d = htmlDe('cmpDiff');
+  assert(/Datos que han cambiado/.test(d), 'no aparece el bloque');
+  assert(/Acristalamiento Sur/.test(d), 'no detecta el cambio de acristalamiento');
+  assert(/Muro interior o medianera Norte/.test(d), 'no detecta el muro interior');
+});
+
+test('la detección de cambios funciona también con cambios de solución', () => {
+  escenarioMadrid();
+  API.doCalc();
+  API.setBase();
+  const antes = API.parametros();
+  API.pickOpt('muro', 'm0');
+  const despues = API.parametros();
+  const camb = API.diffParametros(antes, despues);
+  eq(camb.length, 1, 'solo debe cambiar el muro');
+  eq(camb[0].etiqueta, 'Muro exterior');
+  eq(camb[0].ahora[1], 'Sin aislamiento');
+});
+
+test('la línea base sobrevive al botón de nuevo cálculo', () => {
+  escenarioMadrid();
+  API.doCalc();
+  API.setBase();
+  API.reset();
+  assert(API.S.base !== null, 'la línea base no debe borrarse');
+  eq(API.S.last, null, 'el último cálculo sí se borra');
+});
+
+test('quitar la línea base oculta la tarjeta', () => {
+  escenarioMadrid();
+  API.doCalc();
+  API.setBase();
+  assert(!get('cmpCard').classList.contains('hidden'));
+  API.quitarBase();
+  assert(get('cmpCard').classList.contains('hidden'), 'debe ocultarse');
+  eq(API.S.base, null);
+});
+
+test('la línea base se puede volver a fijar sobre el cálculo nuevo', () => {
+  escenarioMadrid({ anio: 'pre1980' });
+  set('anio', 'pre1980'); API.onAnio(); set('estanq', '0.80'); API.doCalc();
+  API.setBase();
+  const primera = API.S.base.r.Qcal;
+  set('anio', 'post19'); API.onAnio(); set('estanq', '0.30'); API.doCalc();
+  API.setBase();
+  assert(API.S.base.r.Qcal < primera, 'la nueva línea base debe ser la del cálculo actual');
+  assert(/No ha cambiado ningún dato/.test(htmlDe('cmpDiff')), 'debe quedar sin diferencias');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+grupoDe('H · coeficiente global K (CTE DB-HE1)');
+
+test('los valores Ulim de la app coinciden con la tabla 3.1.1.a-HE1', () => {
+  // Valores transcritos de la tabla oficial: muro/suelo exterior, cubierta, suelo UT, huecos
+  const oficial = {
+    'α': [0.80, 0.55, 0.90, 3.2],
+    A: [0.70, 0.50, 0.80, 2.7],
+    B: [0.56, 0.44, 0.75, 2.3],
+    C: [0.49, 0.40, 0.70, 2.1],
+    D: [0.41, 0.35, 0.65, 1.8],
+    E: [0.37, 0.33, 0.59, 1.80]
+  };
+  Object.entries(oficial).forEach(([z, [muro, cub, sue, ven]]) => {
+    const L = API.LIM()[z];
+    eq(L.muro, muro, `muro zona ${z}`);
+    eq(L.cub, cub, `cubierta zona ${z}`);
+    eq(L.sue, sue, `suelo zona ${z}`);
+    eq(L.ven, ven, `huecos zona ${z}`);
+  });
+});
+
+test('los límites de K son los de las tablas 3.1.1.b y 3.1.1.c', () => {
+  eq(API.kLimite('D3', 0.5, 'residencial', 'nuevo'), 0.48, 'D residencial nuevo, V/A ≤ 1');
+  eq(API.kLimite('D3', 6, 'residencial', 'nuevo'), 0.67, 'D residencial nuevo, V/A ≥ 4');
+  eq(API.kLimite('D3', 0.5, 'residencial', 'reforma'), 0.63, 'D reforma, V/A ≤ 1');
+  eq(API.kLimite('D3', 6, 'residencial', 'reforma'), 0.70, 'D reforma, V/A ≥ 4');
+  eq(API.kLimite('E1', 1, 'residencial', 'nuevo'), 0.43, 'E residencial nuevo');
+  eq(API.kLimite('α3', 1, 'residencial', 'nuevo'), 0.67, 'zona alfa residencial nuevo');
+  eq(API.kLimite('D3', 1, 'otros', 'nuevo'), 0.54, 'D otros usos, V/A ≤ 1');
+  eq(API.kLimite('D3', 4, 'otros', 'nuevo'), 0.70, 'D otros usos, V/A ≥ 4');
+  eq(API.kLimite('', 1, 'residencial', 'nuevo'), null, 'sin zona no hay límite');
+});
+
+test('el límite de K se interpola entre V/A = 1 y V/A = 4', () => {
+  near(API.kLimite('D3', 1, 'residencial', 'nuevo'), 0.48, 1e-9, 'extremo inferior');
+  near(API.kLimite('D3', 4, 'residencial', 'nuevo'), 0.67, 1e-9, 'extremo superior');
+  near(API.kLimite('D3', 2.5, 'residencial', 'nuevo'), (0.48 + 0.67) / 2, 1e-9, 'punto medio');
+  const v = [1, 1.5, 2, 3, 4].map(x => API.kLimite('D3', x, 'residencial', 'nuevo'));
+  for (let i = 1; i < v.length; i++) assert(v[i] >= v[i - 1], 'el límite no crece con la compacidad');
+  eq(API.kLimite('D3', 0.2, 'residencial', 'nuevo'), API.kLimite('D3', 1, 'residencial', 'nuevo'), 'por debajo de 1 no baja');
+});
+
+test('K se calcula como la suma de U·A entre la superficie de intercambio', () => {
+  escenarioMadrid();
+  API.doCalc();
+  const r = API.S.last, g = API.geometry();
+  near(r.Aint, g.wallA + g.winA + g.roofA + g.floorA, 1e-9, 'Aint');
+  const esperado = (0.20 * g.wallA + 1.80 * g.winA + 0.25 * g.roofA + 0.45 * g.floorA) * 1.10 / r.Aint;
+  near(r.Kval, esperado, 1e-9, 'K');
+  near(r.compacidad, g.vol / r.Aint, 1e-9, 'compacidad V/A');
+});
+
+test('una envolvente Passivhaus cumple K y una sin aislamiento no', () => {
+  escenarioMadrid();
+  ['m4', 'c3', 's2', 'v4'].forEach((id, i) => API.pickOpt(['muro', 'cub', 'sue', 'ven'][i], id));
+  API.doCalc();
+  assert(API.S.last.Kval <= API.S.last.kLim, `Passivhaus no cumple K: ${API.S.last.Kval} vs ${API.S.last.kLim}`);
+  ['m0', 'c0', 's0', 'v0'].forEach((id, i) => API.pickOpt(['muro', 'cub', 'sue', 'ven'][i], id));
+  API.doCalc();
+  assert(API.S.last.Kval > API.S.last.kLim, 'sin aislamiento debería incumplir K');
+});
+
+test('el panel de resultados muestra K, la compacidad y el veredicto', () => {
+  escenarioMadrid();
+  API.doCalc();
+  const t = htmlDe('resK');
+  assert(/K = /.test(t), 'no muestra K');
+  assert(/V\/A = /.test(t), 'no muestra la compacidad');
+  assert(/Cumple/.test(t), 'no muestra veredicto');
+  assert(/tabla 3\.1\.1\.b/.test(t), 'no cita la tabla del uso residencial');
+  assert(/límite sube a/.test(t), 'no menciona la alternativa de reforma');
+});
+
+test('los usos no residenciales usan la tabla 3.1.1.c', () => {
+  escenarioMadrid();
+  set('tipoEdi', 'oficinas'); API.onUso(); set('nper', 90);
+  API.doCalc();
+  assert(/tabla 3\.1\.1\.c/.test(htmlDe('resK')), 'debería citar la tabla c');
+  assert(!/límite sube a/.test(htmlDe('resK')), 'la tabla c no distingue reforma');
+  eq(API.S.last.kLimRef, null, 'no debe haber límite de reforma separado');
+});
+
+test('el muro interior no entra en la superficie de intercambio de K', () => {
+  escenarioMadrid();
+  API.doCalc();
+  const sinInterior = API.S.last.Aint;
+  escenarioMadrid({ 'int-N': 6 });
+  API.doCalc();
+  assert(API.S.last.Aint < sinInterior, 'Aint debe bajar al declarar muro interior');
+  near(sinInterior - API.S.last.Aint, 6 * 2.7, 1e-6, 'debe bajar en 6 m × 2,7 m');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+grupoDe('I · puentes térmicos, factor b y cargas internas configurables');
+
+test('los puentes térmicos se pueden poner a cero', () => {
+  escenarioMadrid(); set('pt', 0); API.doCalc();
+  eq(API.S.last.Qpt, 0, 'la partida de puentes debe ser nula');
+  escenarioMadrid(); set('pt', 10); API.doCalc();
+  assert(API.S.last.Qpt > 0, 'con el 10 % debe haber puentes');
+});
+
+test('el porcentaje de puentes térmicos escala la partida', () => {
+  const calc = pt => { escenarioMadrid(); set('pt', pt); API.doCalc(); return API.S.last.Qpt; };
+  const a = calc(5), b = calc(10), c = calc(20);
+  near(b / a, 2, 1e-9, '10 % frente a 5 %');
+  near(c / a, 4, 1e-9, '20 % frente a 5 %');
+});
+
+test('los puentes térmicos entran en el coeficiente K', () => {
+  escenarioMadrid(); set('pt', 0); API.doCalc();
+  const sinPuentes = API.S.last.Kval;
+  escenarioMadrid(); set('pt', 10); API.doCalc();
+  near(API.S.last.Kval / sinPuentes, 1.10, 1e-9, 'K con un 10 % de puentes');
+});
+
+test('el factor b del suelo escala la carga del forjado', () => {
+  const calc = b => {
+    escenarioMadrid(); set('sueloTipo', 'nocal'); API.onSuelo(); set('fb', b); API.doCalc();
+    return API.S.last.Qfc;
+  };
+  near(calc(1.0) / calc(0.5), 2, 1e-6, 'b = 1 frente a b = 0,5');
+  assert(calc(0.8) > calc(0.3), 'más b, más pérdida');
+});
+
+test('el factor b solo se usa sobre un local no calefactado', () => {
+  const calc = b => {
+    escenarioMadrid(); set('sueloTipo', 'aire'); API.onSuelo(); set('fb', b); API.doCalc();
+    return API.S.last.Qfc;
+  };
+  near(calc(0.2), calc(1.0), 1e-9, 'sobre aire exterior el campo no debe influir');
+  escenarioMadrid(); set('sueloTipo', 'nocal'); API.onSuelo();
+  assert(!get('wrap-fb').classList.contains('hidden'), 'el campo debe verse con local no calefactado');
+  set('sueloTipo', 'aire'); API.onSuelo();
+  assert(get('wrap-fb').classList.contains('hidden'), 'el campo debe ocultarse sobre aire exterior');
+});
+
+test('el factor b se valida', () => {
+  escenarioMadrid(); set('sueloTipo', 'nocal'); API.onSuelo();
+  set('fb', 0.5); eq(API.validate(2), true, 'valor correcto');
+  set('fb', 0); eq(API.validate(2), false, 'fuera de rango');
+});
+
+test('las ganancias por ocupante son editables', () => {
+  escenarioMadrid(); set('pSens', 75); set('pLat', 55); API.doCalc();
+  const base = API.S.last;
+  escenarioMadrid(); set('pSens', 100); set('pLat', 40); API.doCalc();
+  const nuevo = API.S.last;
+  near(nuevo.Qps / base.Qps, 100 / 75, 1e-9, 'sensible proporcional');
+  near(nuevo.Qpl / base.Qpl, 40 / 55, 1e-9, 'latente proporcional');
+});
+
+test('las ganancias internas admiten cualquier densidad de potencia', () => {
+  escenarioMadrid(); set('gains', 18.1); API.doCalc();
+  near(API.S.last.Qeq, 18.1 * 120, 1e-6, 'W/m² por superficie útil');
+});
+
+test('los campos nuevos se validan', () => {
+  escenarioMadrid();
+  set('pt', 50); eq(API.validate(3), false, 'puentes fuera de rango');
+  set('pt', 10); eq(API.validate(3), true, 'puentes correctos');
+  set('pSens', 10); eq(API.validate(4), false, 'ganancia sensible fuera de rango');
+  set('pSens', 75); eq(API.validate(4), true);
+  set('pLat', 5); eq(API.validate(4), false, 'ganancia latente fuera de rango');
+  set('pLat', 55);
+  set('gains', 200); eq(API.validate(4), false, 'ganancias fuera de rango');
+  set('gains', 8); eq(API.validate(4), true);
+});
+
+test('los cambios en estos campos se reflejan en la comparación', () => {
+  escenarioMadrid(); API.doCalc(); API.setBase();
+  set('pt', 0); set('pSens', 80); API.doCalc();
+  const d = htmlDe('cmpDiff');
+  assert(/Puentes térmicos/.test(d), 'no detecta los puentes térmicos');
+  assert(/Ganancia sensible por ocupante/.test(d), 'no detecta las ganancias por ocupante');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════ */
