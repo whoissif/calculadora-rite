@@ -163,7 +163,8 @@ function buildFacadeRows() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td id="fl-${f.id}"></td>
-      <td><input type="number" id="len-${f.id}" min="0" max="9999" step="0.1" value="0" oninput="updDerived()" aria-label="Longitud de muro exterior"></td>
+      <td><input type="number" id="len-${f.id}" min="0" max="9999" step="0.1" value="0" oninput="updDerived()" aria-label="Longitud total de muro"></td>
+      <td><input type="number" id="int-${f.id}" min="0" max="9999" step="0.1" value="0" oninput="updDerived()" aria-label="Longitud de muro interior o medianera"></td>
       <td><input type="number" id="pct-${f.id}" min="0" max="90" step="1" value="15" oninput="updDerived()" aria-label="Porcentaje de acristalamiento"></td>
       <td><input type="number" id="obs-${f.id}" min="0" max="80" step="1" value="0" aria-label="Ángulo de obstrucción"></td>`;
     tb.appendChild(tr);
@@ -195,16 +196,23 @@ function geometry() {
   const f = posFlags();
   const faces = FACHADAS.map(fc => {
     const len = Math.max(num('len-' + fc.id) || 0, 0);
+    // Parte del muro que no da al exterior: medianeras y paredes con otras viviendas o locales
+    // calefactados. No transmite carga (a ambos lados hay la misma temperatura) y no se le exige
+    // transmitancia límite, así que se descuenta del cerramiento exterior.
+    const lenInt = Math.min(Math.max(num('int-' + fc.id) || 0, 0), len);
+    const lenExt = len - lenInt;
     const pct = Math.min(Math.max(num('pct-' + fc.id) || 0, 0), 90);
     const obs = Math.min(Math.max(num('obs-' + fc.id) || 0, 0), 80);
-    const fac = len * alt * npl, win = fac * pct / 100;
-    return { id: fc.id, az: fc.az + giro, len, pct, obs, fac, win, wall: fac - win };
+    const fac = lenExt * alt * npl, win = fac * pct / 100;
+    return { id: fc.id, az: fc.az + giro, len, lenInt, lenExt, pct, obs, fac, win, wall: fac - win };
   });
   const sum = k => faces.reduce((a, x) => a + x[k], 0);
   const supT = sup * npl;
   return {
     sup, npl, alt, supT, vol: supT * alt, faces,
-    per: sum('len'), fac: sum('fac'), winA: sum('win'), wallA: sum('wall'),
+    per: sum('lenExt'), perTot: sum('len'), perInt: sum('lenInt'),
+    facadeInt: sum('lenInt') * alt * npl,
+    fac: sum('fac'), winA: sum('win'), wallA: sum('wall'),
     roofA: f.roof ? sup : 0, floorA: f.floor ? sup : 0
   };
 }
@@ -218,11 +226,14 @@ function updDerived() {
   const g = geometry();
   if (g.sup > 0 && g.alt > 0 && g.per > 0) {
     const pv = g.fac > 0 ? g.winA / g.fac * 100 : 0;
+    const intra = g.perInt > 0
+      ? `<br>Muro interior o medianera: <strong>${fmt(g.perInt)} m</strong> &nbsp;·&nbsp; superficie no expuesta: <strong>${fmt(g.facadeInt, 0)} m²</strong> — no transmite carga ni se le exige transmitancia límite`
+      : '';
     $('derivedTxt').innerHTML =
       `Fachada exterior: ${fmt(g.per)} m × ${fmt(g.alt)} m × ${g.npl} ${g.npl === 1 ? 'planta' : 'plantas'} = <strong>${fmt(g.fac, 0)} m²</strong>
        (muros <strong>${fmt(g.wallA, 0)} m²</strong> + ventanas <strong>${fmt(g.winA, 0)} m²</strong>, ${fmt(pv, 0)} %)<br>
        Superficie útil total: <strong>${fmt(g.supT, 0)} m²</strong> &nbsp;·&nbsp; Volumen: <strong>${fmt(g.vol, 0)} m³</strong>
-       &nbsp;·&nbsp; Cubierta: <strong>${fmt(g.roofA, 0)} m²</strong> &nbsp;·&nbsp; Suelo inferior: <strong>${fmt(g.floorA, 0)} m²</strong>`;
+       &nbsp;·&nbsp; Cubierta: <strong>${fmt(g.roofA, 0)} m²</strong> &nbsp;·&nbsp; Suelo inferior: <strong>${fmt(g.floorA, 0)} m²</strong>${intra}`;
   } else {
     $('derivedTxt').textContent = DERIVED_EMPTY;
   }
@@ -452,7 +463,9 @@ function validate(step) {
     ok = flag('e-alt', !range('alt', 2, 20)) && ok;
     ok = flag('e-giro', !range('giro', -45, 45)) && ok;
     const g = geometry();
-    const badF = g.per < 4 || FACHADAS.some(f => !range('len-' + f.id, 0, 1e5) || !range('pct-' + f.id, 0, 90) || !range('obs-' + f.id, 0, 80));
+    const badF = g.per < 4 || FACHADAS.some(f =>
+      !range('len-' + f.id, 0, 1e5) || !range('pct-' + f.id, 0, 90) || !range('obs-' + f.id, 0, 80) ||
+      !range('int-' + f.id, 0, 1e5) || (num('int-' + f.id) || 0) > (num('len-' + f.id) || 0));
     ok = flag('e-per', badF) && ok;
   }
   if (step === 3) {
@@ -679,8 +692,8 @@ function render(r) {
   const pos = $('posicion').selectedOptions[0].text.split(' (')[0];
   const row = (a, b, hc = '', rc = '') => `<tr><td>${a}</td><td>${b}</td><td class="r">${hc}</td><td class="r">${rc}</td></tr>`;
   const Uwm = u => `U = ${fmt(u, 2)} W/m²K`;
-  const facTxt = g.faces.filter(fc => fc.len > 0)
-    .map(fc => `${rumbo(fc.az)} ${fmt(fc.len)} m · ${fmt(fc.pct, 0)} %${fc.obs ? ` · obstr. ${fmt(fc.obs, 0)}°` : ''}`).join('<br>');
+  const facTxt = g.faces.filter(fc => fc.lenExt > 0 || fc.lenInt > 0)
+    .map(fc => `${rumbo(fc.az)} ${fmt(fc.lenExt)} m${fc.lenInt > 0 ? ` (+${fmt(fc.lenInt)} m interior)` : ''} · ${fmt(fc.pct, 0)} %${fc.obs ? ` · obstr. ${fmt(fc.obs, 0)}°` : ''}`).join('<br>');
   const floorHc = !r.suelo ? '' : r.suelo.b === null ? `${Uwm(r.Us)} · fg1·fg2 = ${fmt(FG1 * r.fg2, 2)}` : `${Uwm(r.Us)} · b = ${fmt(r.suelo.b, 1)}`;
   $('sumTable').innerHTML = `
     <thead><tr><th>Parámetro</th><th>Valor</th><th class="r heat-c">Calefacción</th><th class="r cool-c">Refrigeración</th></tr></thead>

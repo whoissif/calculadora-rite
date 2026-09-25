@@ -16,7 +16,7 @@ El sitio se sirve directamente desde la rama `main` con GitHub Pages: sin compil
 - **Envolvente térmica**: muros, cubierta, suelo y ventanas, con comprobación de la transmitancia límite del CTE DB-HE 2019. Se preselecciona una envolvente típica según el año de construcción, y cada elemento admite un valor de U (y g en ventanas) conocido.
 - **Posición en el edificio**: edificio completo, última planta, planta más baja o planta intermedia.
 - **Suelo inferior** sobre el terreno, sobre el aire exterior (porche, garaje abierto, voladizo) o sobre un local no calefactado.
-- **Fachadas por orientación**: longitud de muro, porcentaje de acristalamiento y ángulo de obstrucción de los edificios de enfrente en cada una de las cuatro fachadas, con giro del edificio respecto al norte.
+- **Fachadas por orientación**: longitud total de muro, la parte que no da al exterior (medianeras y paredes con otros locales calefactados, que se descuentan solas), porcentaje de acristalamiento y ángulo de obstrucción de los edificios de enfrente en cada una de las cuatro fachadas, con giro del edificio respecto al norte.
 - **Ventilación**: CTE DB-HS3 en viviendas, RITE IT 1.1.4.2 (IDA, caudal por persona) en el resto de usos, con o sin recuperador de calor.
 - **Calefacción** (UNE-EN 12831 simplificada):
   - Transmisión por muros, cubierta y ventanas.
@@ -63,6 +63,9 @@ calculadora-rite/
 ├── js/
 │   ├── data.js       # Datos normativos: zonas CTE por provincia y altitud, estaciones IDAE, límites U, caudales, radiación
 │   └── app.js        # Lógica: navegación, validación, cálculo de cargas y resultados
+├── test/
+│   ├── dom.js        # Simulador mínimo de DOM para ejecutar la app en Node
+│   └── run.js        # Suite de tests: node test/run.js
 ├── .gitignore        # Excluye los documentos de referencia (*.pdf) y la configuración local
 └── README.md
 ```
@@ -76,6 +79,16 @@ Basta con abrir `index.html` en el navegador. Si prefieres servirlo:
 ```bash
 python -m http.server 8000
 ```
+
+### Tests
+
+La lógica está cubierta por una suite de regresión que se ejecuta con Node, sin instalar nada:
+
+```bash
+node test/run.js
+```
+
+Cubre los datos normativos, los enlaces entre `index.html` y el código (detecta identificadores rotos), la geometría y los muros interiores, el cálculo de cargas (envolvente, recuperador de calor, desglose, caudales de ventilación), la zona climática y la verificación del CTE, y la psicrometría y la radiación solar. El barrido de envolvente está fijado como valor de referencia: si un cambio altera los resultados, la suite falla y hay que decidir a conciencia si el cambio es correcto.
 
 ## Publicación
 

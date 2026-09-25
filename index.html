@@ -239,15 +239,16 @@
         <thead>
           <tr>
             <th>Fachada</th>
-            <th>Longitud de muro exterior <span class="unit">(m por planta)</span></th>
-            <th>Acristalamiento <span class="unit">(% de la fachada)</span></th>
+            <th>Longitud total de muro <span class="unit">(m por planta)</span></th>
+            <th>De ella, interior o medianera <span class="unit">(m)</span></th>
+            <th>Acristalamiento <span class="unit">(% del muro exterior)</span></th>
             <th>Obstrucción enfrente <span class="unit">(°)</span></th>
           </tr>
         </thead>
         <tbody id="facadeRows"></tbody>
       </table>
     </div>
-    <span class="err-txt" id="e-per">Introduce al menos 4 m de muro exterior; acristalamiento entre 0 y 90 %, obstrucción entre 0 y 80°</span>
+    <span class="err-txt" id="e-per">Introduce al menos 4 m de muro exterior; el muro interior no puede superar la longitud total; acristalamiento entre 0 y 90 %, obstrucción entre 0 y 80°</span>
     <p class="adv__note">La obstrucción es el ángulo sobre el horizonte de los edificios o elementos situados enfrente de la fachada, visto desde el centro de las ventanas. Por ejemplo, un edificio de 11 m más alto que la ventana situado a 11 m de distancia da 45°. Deja 0 si no hay obstrucciones.</p>
 
     <div class="notice notice-blue" id="derivedBox">
@@ -256,7 +257,7 @@
     </div>
     <div class="notice notice-yellow">
       <span class="notice__icon">!</span>
-      <span><strong>Longitud de muro exterior × altura = superficie de fachada exterior.</strong> Mide solo los muros en contacto con el exterior o con espacios no calefactados (sótanos, garajes, etc.). No incluyas medianeras ni paredes con otras viviendas calefactadas.</span>
+      <span><strong>Longitud de muro exterior × altura = superficie de fachada exterior.</strong> Escribe la longitud total del muro de cada orientación y, en la segunda columna, la parte que <em>no</em> da al exterior: medianeras y paredes con otras viviendas u otros locales calefactados. Esa parte no transmite carga ni se le exige transmitancia límite, así que se descuenta sola. Los muros con sótanos, garajes y espacios no calefactados <strong>sí</strong> cuentan como exteriores.</span>
     </div>
 
     <div class="actions">
